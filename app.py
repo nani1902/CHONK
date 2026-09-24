@@ -3,35 +3,16 @@
 
 from __future__ import annotations
 
-import argparse
 import queue
 import threading
 import tkinter as tk
-import webbrowser
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from types import SimpleNamespace
 
-from pdf_compressor import CompressionError, human_size, parse_size, run
-
-
-GHOSTSCRIPT_URL = "https://www.ghostscript.com/releases/gsdnld.html"
-
-
-class QueueWriter:
-    """File-like stream that sends worker output to Tk's main thread."""
-
-    def __init__(self, messages: queue.Queue):
-        self.messages = messages
-
-    def write(self, value: str) -> int:
-        if value:
-            self.messages.put(("log", value))
-        return len(value)
-
-    def flush(self) -> None:
-        pass
+from chonk import engine
+from chonk.errors import ChonkError
+from chonk.sizes import human_size, parse_size
+from chonk.vault import write_private
 
 
 class ChonkApp:
@@ -47,11 +28,9 @@ class ChonkApp:
         self.output_path = tk.StringVar()
         self.target_size = tk.StringVar(value="2 MB")
         self.status = tk.StringVar(value="Choose a PDF to get started.")
-        self.dependency_status = tk.StringVar()
 
         self._configure_style()
         self._build_ui()
-        self._check_ghostscript()
         self.root.after(100, self._drain_messages)
 
     def _configure_style(self) -> None:
@@ -155,22 +134,6 @@ class ChonkApp:
             style="Hint.TLabel",
         ).pack(anchor="w", pady=(18, 0))
 
-        dependency = ttk.Frame(page, style="App.TFrame")
-        dependency.pack(fill="x", pady=(12, 8))
-        ttk.Label(dependency, textvariable=self.dependency_status, style="Tagline.TLabel").pack(
-            side="left"
-        )
-        self.install_link = ttk.Label(
-            dependency,
-            text="Ghostscript install guide",
-            background="#f4f6f8",
-            foreground="#c2410c",
-            cursor="hand2",
-            font=("Arial", 10, "underline"),
-        )
-        self.install_link.pack(side="right")
-        self.install_link.bind("<Button-1>", lambda _event: webbrowser.open(GHOSTSCRIPT_URL))
-
         actions = ttk.Frame(page, style="App.TFrame")
         actions.pack(fill="x", pady=(4, 10))
         self.compress_button = ttk.Button(
@@ -215,16 +178,6 @@ class ChonkApp:
     def _entry(parent, variable: tk.StringVar, width: int = 52) -> ttk.Entry:
         return ttk.Entry(parent, textvariable=variable, width=width)
 
-    def _check_ghostscript(self) -> None:
-        try:
-            from pdf_compressor import find_ghostscript
-
-            find_ghostscript(None)
-            self.dependency_status.set("Ghostscript is ready.")
-            self.install_link.configure(foreground="#64748b")
-        except CompressionError:
-            self.dependency_status.set("Ghostscript is required to compress PDFs.")
-
     def _choose_source(self) -> None:
         selected = filedialog.askopenfilename(
             title="Choose a PDF",
@@ -256,7 +209,7 @@ class ChonkApp:
         output = Path(self.output_path.get().strip()).expanduser()
         try:
             target_bytes = parse_size(self.target_size.get())
-        except argparse.ArgumentTypeError as exc:
+        except ValueError as exc:
             messagebox.showerror("Check the maximum size", str(exc), parent=self.root)
             return
 
@@ -305,28 +258,38 @@ class ChonkApp:
     def _compress_worker(
         self, source: Path, output: Path, target_bytes: int, force: bool
     ) -> None:
-        writer = QueueWriter(self.messages)
-        args = SimpleNamespace(
-            input=source,
-            target_size=target_bytes,
-            output=output,
-            min_dpi=72,
-            max_dpi=600,
-            max_attempts=16,
-            timeout=900,
-            comparison_dpi=150,
-            ghostscript=None,
-            force=force,
-        )
+        # The progress callback posts to the queue; no global stream redirection,
+        # so the worker thread cannot swallow another thread's output.
+        def say(message: str) -> None:
+            self.messages.put(("log", message + "\n"))
+
+        exit_code = 2
         try:
-            with redirect_stderr(writer), redirect_stdout(writer):
-                exit_code = run(args)
-        except (CompressionError, OSError) as exc:
-            writer.write(f"Error: {exc}\n")
-            exit_code = 2
+            result = engine.compress_file(
+                source, engine.Options(target_bytes=target_bytes, progress=say)
+            )
+            if result.status == "infeasible" or result.output is None:
+                say(
+                    f"No tested setting reached {human_size(target_bytes)}. The smallest was "
+                    f"{human_size(result.smallest_bytes or 0)}. Nothing was written."
+                )
+            else:
+                write_private(output, result.output, overwrite=force)
+                if result.profile and not result.profile.lossless:
+                    say(f"Chosen: {result.profile.label()}")
+                say(
+                    f"Worst page {(result.worst_page_index or 0) + 1} of {result.pages}: "
+                    f"SSIM {result.worst_page_ssim:.4f}"
+                )
+                if result.lost:
+                    say("Not preserved: " + ", ".join(result.lost))
+                exit_code = 0
+        except ChonkError as exc:
+            say(f"Error: {exc}")
+        except OSError as exc:
+            say(f"Error: {exc.strerror or 'could not access a file'}")
         except Exception as exc:  # Keep unexpected errors visible in the UI.
-            writer.write(f"Unexpected error: {exc}\n")
-            exit_code = 2
+            say(f"Unexpected error: {type(exc).__name__}")
         self.messages.put(("done", exit_code, source, output, target_bytes))
 
     def _drain_messages(self) -> None:
@@ -336,7 +299,7 @@ class ChonkApp:
                 if message[0] == "log":
                     content = message[1]
                     self._append_log(content)
-                    if content.startswith("Trying profile"):
+                    if content.startswith("  tried"):
                         self.status.set("Comparing compression options…")
                 elif message[0] == "done":
                     _, exit_code, source, output, target_bytes = message

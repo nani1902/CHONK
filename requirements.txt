@@ -1,3 +1,43 @@
-pypdf>=5.0
-pypdfium2>=4.30
-Pillow>=10.0
+# Exact versions CHONK is tested with, including everything they pull in.
+# Generated from a clean virtualenv with:
+#   pip install pypdf==6.19.0 pypdfium2==5.13.0 pillow==12.3.0 numpy==2.4.6 mcp==2.2.0
+#   pip freeze
+# Install:  python -m pip install -r requirements.txt && python -m pip install --no-deps -e .
+# Ranges for library use are in pyproject.toml. Platform-only dependencies
+# (for example colorama on Windows) are resolved by pip at install time.
+#
+# Note: the MCP SDK ships HTTP transports (httpx2, starlette, uvicorn). CHONK
+# only uses stdio and never opens a socket; `chonk mcp --no-network` makes the
+# kernel enforce that on Linux.
+annotated-types==0.8.0
+anyio==4.15.1
+attrs==26.1.0
+cffi==2.1.1
+click==8.5.0
+cryptography==50.0.1
+h11==0.16.0
+httpcore2==2.13.1
+httpx2==2.13.1
+idna==3.20
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+mcp==2.2.0
+mcp-types==2.2.0
+numpy==2.4.6
+opentelemetry-api==1.44.0
+pillow==12.3.0
+pycparser==3.0
+pydantic==2.13.5
+pydantic_core==2.46.5
+PyJWT==2.15.0
+pypdf==6.19.0
+pypdfium2==5.13.0
+python-multipart==0.0.32
+referencing==0.37.0
+rpds-py==2026.6.3
+sse-starlette==3.4.11
+starlette==1.7.0
+truststore==0.10.4
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+uvicorn==0.53.0

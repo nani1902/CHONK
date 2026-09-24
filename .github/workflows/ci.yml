@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-no-network:
+    name: Linux (tests run with the network removed by the kernel)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install (network allowed here only)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr
+          python -m pip install -r requirements.txt
+          python -m pip install --no-deps -e .
+          python -m pip install pytest "rapidocr-onnxruntime>=1.4,<2"
+
+      - name: Allow unprivileged user namespaces
+        # Ubuntu 24.04 restricts them through AppArmor by default.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Prove the namespace has no network
+        run: |
+          if unshare --user --map-current-user --net python -c \
+              "import socket; s = socket.socket(); s.settimeout(3); s.connect(('1.1.1.1', 53))"; then
+            echo "::error::the test namespace can reach the network"
+            exit 1
+          fi
+
+      - name: Test suite inside a network namespace
+        run: unshare --user --map-current-user --net python -m pytest -q -rs
+
+  other-platforms:
+    name: ${{ matrix.os }} (socket guard only; not yet verified)
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install --no-deps -e .
+          python -m pip install pytest
+      - name: Test suite
+        run: python -m pytest -q -rs

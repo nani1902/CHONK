@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/Private/**)",
+      "Edit(~/Private/**)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "denyRead": [
+        "~/Private"
+      ]
+    }
+  }
+}
