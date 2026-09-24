@@ -26,7 +26,7 @@ def test_server_end_to_end(tmp_path: Path, scanned: bytes):
     home = tmp_path / "home"
     home.mkdir()
     environment = {key: value for key, value in os.environ.items() if key not in ("DISPLAY", "WAYLAND_DISPLAY")}
-    environment.update(HOME=str(home), CHONK_OCR="none")
+    environment.update(HOME=str(home), CHONK_OCR="none", CHONK_NO_GUI="1")
     params = StdioServerParameters(command=sys.executable, args=["-m", "chonk", "mcp", "--vault", str(vault)],
                                    env=environment, cwd=str(tmp_path))
     transcript: list[str] = []

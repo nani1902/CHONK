@@ -53,8 +53,7 @@ def test_netjail_refuses_off_linux(monkeypatch):
 
 @pytest.fixture
 def headless(monkeypatch):
-    if sys.platform in ("darwin", "win32"):
-        pytest.skip("these platforms always have a display")
+    monkeypatch.setenv("CHONK_NO_GUI", "1")
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
 
@@ -84,3 +83,9 @@ def test_windows_run_in_child_processes_not_the_server():
     for name in ("private.py", "mcp_server.py", "engine.py", "quality.py", "vault.py"):
         assert not any(m.startswith("tkinter") for m in imported_modules(PACKAGE / name)), name
     assert os.path.exists(PACKAGE / "review.py") and os.path.exists(PACKAGE / "picker.py")
+
+
+def test_no_gui_switch_wins_even_with_a_display(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setenv("CHONK_NO_GUI", "1")
+    assert picker.pick_open(tmp_path) == ("unavailable", None)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pdfs
@@ -79,5 +80,9 @@ def test_doctor_apply_backs_up_and_walls(tmp_path, monkeypatch, capsys):
     assert json.loads((config / "settings.json").read_text())["model"] == "keep"
     assert list(config.glob("settings.json.chonk-backup-*"))
     capsys.readouterr()
-    assert main(["doctor", "--privacy", "--vault", str(vault), "--project", str(tmp_path)]) == 0
-    assert "WALLED" in capsys.readouterr().out
+    code = main(["doctor", "--privacy", "--vault", str(vault), "--project", str(tmp_path)])
+    output = capsys.readouterr().out
+    if sys.platform == "win32":  # no Claude Code sandbox on native Windows: never walled
+        assert code == 1 and "PARTIAL" in output and "WSL2" in output
+    else:
+        assert code == 0 and "WALLED" in output

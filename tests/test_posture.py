@@ -57,8 +57,36 @@ def test_snippet_uses_home_relative_paths(home):
 
 def test_snippet_for_vault_outside_home_uses_double_slash(home, tmp_path):
     snippet = posture.lock_snippet(tmp_path / "vault")
-    assert snippet["permissions"]["deny"][0] == f"Read(/{(tmp_path / 'vault').resolve().as_posix()}/**)"
-    assert snippet["permissions"]["deny"][0].startswith("Read(//")
+    rule = snippet["permissions"]["deny"][0]
+    assert rule == f"Read(/{posture._posix(tmp_path / 'vault')}/**)"  # noqa: SLF001
+    assert rule.startswith("Read(//") and ":" not in rule
+
+
+@pytest.mark.parametrize("windows, claude", [
+    ("C:/Users/alice/Private", "/c/Users/alice/Private"),
+    ("D:/vault", "/d/vault"),
+    ("/home/alice/Private", "/home/alice/Private"),
+])
+def test_windows_paths_use_claude_codes_form(monkeypatch, windows, claude):
+    class Fake:
+        def expanduser(self):
+            return self
+
+        def resolve(self):
+            return self
+
+        def as_posix(self):
+            return windows
+
+    assert posture._posix(Fake()) == claude  # noqa: SLF001
+
+
+def test_double_slash_rule_covers_vault_outside_home(home, project, tmp_path):
+    settings = posture.lock_snippet(tmp_path / "vault")
+    settings["sandbox"]["filesystem"]["denyRead"] = [str(tmp_path / "vault")]
+    write(home / ".claude" / "settings.json", settings)
+    report = posture.check(tmp_path / "vault", project, platform="darwin")
+    assert "read_deny_rule" not in report.missing and "edit_deny_rule" not in report.missing
 
 
 def test_deny_rules_without_sandbox_are_partial(home, project):

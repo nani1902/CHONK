@@ -102,6 +102,11 @@ The lock that `--apply` adds (also in [`examples/claude-settings.json`](examples
 Using a different folder: set `CHONK_VAULT=/path/to/folder` for both the
 server and `chonk doctor`, or pass `--vault`.
 
+Running headless (over SSH, in CI, or anywhere nobody can click a dialog):
+set `CHONK_NO_GUI=1`. The picker and review window then report
+`unavailable` immediately instead of waiting for a click nobody will make.
+Use `list_vault` to choose documents.
+
 **Extra protection on Linux:** `chonk mcp --no-network` re-runs the server
 in a fresh network namespace, using bubblewrap or `unshare`, so the kernel
 blocks CHONK's network access. X11 and Wayland file pickers still open. It

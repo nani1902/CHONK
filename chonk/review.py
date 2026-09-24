@@ -67,6 +67,8 @@ def request_review(original_png: bytes, compressed_png: bytes, *, page: int, pag
 
 
 def _has_display() -> bool:
+    if os.environ.get("CHONK_NO_GUI"):  # headless sessions (SSH, CI) must never wait on a dialog
+        return False
     if sys.platform in ("darwin", "win32"):
         return True
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))

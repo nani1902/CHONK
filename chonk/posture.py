@@ -70,12 +70,19 @@ def default_vault() -> Path:
     return Path(configured).expanduser() if configured else Path.home() / "Private"
 
 
+def _posix(path: Path) -> str:
+    """Absolute POSIX form as Claude Code matches it: ``C:\\Users\\x`` becomes ``/c/Users/x``."""
+    text = path.expanduser().resolve().as_posix()
+    match = re.match(r"^([A-Za-z]):/(.*)$", text)
+    return f"/{match.group(1).lower()}/{match.group(2)}" if match else text
+
+
 def display_path(path: Path) -> str:
     """``~/Private`` rather than ``/Users/name/Private`` where possible."""
     try:
         return "~/" + path.expanduser().resolve().relative_to(Path.home().resolve()).as_posix()
     except ValueError:
-        return path.expanduser().resolve().as_posix()
+        return _posix(path)
 
 
 def claude_config_dir() -> Path:
@@ -189,20 +196,20 @@ def _rule_path(rule: str, tool: str) -> str | None:
 
 def _permission_rule_base(path: str, source: SettingsSource) -> str | None:
     """Absolute POSIX pattern for a Read/Edit rule path, or None if unanchored."""
-    home = Path.home().resolve().as_posix()
+    home = _posix(Path.home())
     if path.startswith("//"):
         return path[1:]
     if path.startswith("~/"):
         return home + path[1:]
     if path.startswith("/"):
         anchor = source.path.parent if source.scope == "user" else source.path.parent.parent
-        return anchor.resolve().as_posix() + path
+        return _posix(anchor) + path
     return None  # relative rules match under the current directory only
 
 
 def _covers(pattern: str, vault: Path) -> bool:
     """Does the glob match files at any depth inside the vault?"""
-    root = vault.expanduser().resolve().as_posix()
+    root = _posix(vault)
     probes = (root + "/chonk-probe.pdf", root + "/a/b/chonk-probe.pdf")
     regex = _glob_regex(pattern)
     return all(regex.match(probe) for probe in probes)
@@ -222,26 +229,26 @@ def _permission_rule_covers(sources: list[SettingsSource], tool: str, vault: Pat
 
 
 def _sandbox_path(entry: str, source: SettingsSource) -> str:
-    home = Path.home().resolve().as_posix()
+    home = _posix(Path.home())
     if entry.startswith("~/") or entry == "~":
         return home + entry[1:]
     if entry.startswith("/"):
         return entry
     anchor = claude_config_dir() if source.scope == "user" else source.path.parent.parent
-    return (anchor / entry).resolve().as_posix()
+    return _posix(anchor / entry)
 
 
 def _sandbox_entry_covers(entry: str, source: SettingsSource, vault: Path) -> bool:
     path = _sandbox_path(entry, source).rstrip("/")
     if any(char in path for char in "*?"):
         return _covers(path, vault)
-    root = vault.expanduser().resolve().as_posix()
+    root = _posix(vault)
     return root == path or root.startswith(path + "/")
 
 
 def _sandbox_entry_reopens(entry: str, source: SettingsSource, vault: Path) -> bool:
     path = _sandbox_path(entry, source).rstrip("/")
-    root = vault.expanduser().resolve().as_posix()
+    root = _posix(vault)
     if any(char in path for char in "*?"):
         return bool(_glob_regex(path).match(root + "/chonk-probe.pdf"))
     # An allowRead narrower than (or equal to) the denied vault re-opens it.

@@ -11,6 +11,7 @@ jobs:
   linux-no-network:
     name: Linux (tests run with the network removed by the kernel)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -48,6 +49,7 @@ jobs:
     name: ${{ matrix.os }} (socket guard only; not yet verified)
     runs-on: ${{ matrix.os }}
     continue-on-error: true
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -63,4 +65,6 @@ jobs:
           python -m pip install --no-deps -e .
           python -m pip install pytest
       - name: Test suite
+        env:
+          CHONK_NO_GUI: "1"  # hosted runners have a desktop session; never open dialogs
         run: python -m pytest -q -rs

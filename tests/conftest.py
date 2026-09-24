@@ -22,6 +22,8 @@ class NetworkBlocked(RuntimeError):
 
 
 _ALLOWED_FAMILIES = {getattr(socket, "AF_UNIX", object())}
+# asyncio on Windows builds its internal socketpair over loopback.
+_LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +33,8 @@ def _no_network(monkeypatch):
 
     def guard(method):
         def wrapper(self, address, *args, **kwargs):
-            if self.family in _ALLOWED_FAMILIES:
+            host = address[0] if isinstance(address, tuple) and address else None
+            if self.family in _ALLOWED_FAMILIES or host in _LOOPBACK:
                 return method(self, address, *args, **kwargs)
             raise NetworkBlocked(f"test tried to open a network connection to {address!r}")
         return wrapper
