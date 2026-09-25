@@ -197,11 +197,15 @@ def test_real_ladder_sizes_are_not_monotonic(ghostscript, corpus_dir, tmp_path):
     -dPassThroughJPEGImages keeps the original image data."""
     source = copy_fixture(corpus_dir, "image-scan", tmp_path)
     profiles = pdf_compressor.build_profiles(600, 72)
+    # Ghostscript stamps the run time into dates and the XMP document UUID.
+    # On some builds (seen with 10.08.0 on Windows) that shifts the output by a
+    # byte from one second to the next, so pin the clock to compare exact sizes.
+    env = {**os.environ, "SOURCE_DATE_EPOCH": "1700000000"}
     sizes = []
     for index, profile in enumerate(profiles[:6]):
         output = tmp_path / f"candidate-{index}.pdf"
         command = pdf_compressor.make_ghostscript_command(ghostscript, source, output, profile)
-        subprocess.run(command, check=True, capture_output=True, timeout=120)
+        subprocess.run(command, check=True, capture_output=True, timeout=120, env=env)
         sizes.append(output.stat().st_size)
 
     increases = [i for i in range(1, len(sizes)) if sizes[i] > sizes[i - 1]]
