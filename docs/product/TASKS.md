@@ -1,6 +1,6 @@
 # Implementation backlog
 
-All tasks below are **not started**. The documents are specifications; no runtime feature should be considered delivered because it appears here. These task descriptions can be copied into GitHub issues without further decomposition for initial assignment. Creating this file does not create issues or assign people.
+CHONK-003 (engine extraction) is implemented; all other tasks below are **not started**. The documents are specifications; no runtime feature should be considered delivered because it appears here. These task descriptions can be copied into GitHub issues without further decomposition for initial assignment. Creating this file does not create issues or assign people.
 
 References: [requirements](PRODUCT_REQUIREMENTS.md), [architecture](ARCHITECTURE.md), [release gates](VALIDATION.md).
 

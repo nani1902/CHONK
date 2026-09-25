@@ -3,35 +3,37 @@
 
 from __future__ import annotations
 
-import argparse
 import queue
+import sys
 import threading
 import tkinter as tk
 import webbrowser
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from types import SimpleNamespace
 
-from pdf_compressor import CompressionError, human_size, parse_size, run
+try:
+    import chonk  # noqa: F401
+except ImportError:  # Running from a source checkout without installation.
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
+from chonk import (  # noqa: E402
+    AttemptStarted,
+    CompressionError,
+    CompressionRequest,
+    ResultStatus,
+    compress_pdf,
+    human_size,
+    parse_size,
+)
+from chonk.adapters.text import (  # noqa: E402
+    describe_progress,
+    describe_success,
+    describe_target_not_met,
+)
+from chonk.backends.ghostscript import find_ghostscript  # noqa: E402
 
 
 GHOSTSCRIPT_URL = "https://www.ghostscript.com/releases/gsdnld.html"
-
-
-class QueueWriter:
-    """File-like stream that sends worker output to Tk's main thread."""
-
-    def __init__(self, messages: queue.Queue):
-        self.messages = messages
-
-    def write(self, value: str) -> int:
-        if value:
-            self.messages.put(("log", value))
-        return len(value)
-
-    def flush(self) -> None:
-        pass
 
 
 class ChonkApp:
@@ -217,8 +219,6 @@ class ChonkApp:
 
     def _check_ghostscript(self) -> None:
         try:
-            from pdf_compressor import find_ghostscript
-
             find_ghostscript(None)
             self.dependency_status.set("Ghostscript is ready.")
             self.install_link.configure(foreground="#64748b")
@@ -256,7 +256,7 @@ class ChonkApp:
         output = Path(self.output_path.get().strip()).expanduser()
         try:
             target_bytes = parse_size(self.target_size.get())
-        except argparse.ArgumentTypeError as exc:
+        except ValueError as exc:
             messagebox.showerror("Check the maximum size", str(exc), parent=self.root)
             return
 
@@ -305,58 +305,58 @@ class ChonkApp:
     def _compress_worker(
         self, source: Path, output: Path, target_bytes: int, force: bool
     ) -> None:
-        writer = QueueWriter(self.messages)
-        args = SimpleNamespace(
-            input=source,
-            target_size=target_bytes,
+        request = CompressionRequest(
+            source=source,
             output=output,
-            min_dpi=72,
-            max_dpi=600,
-            max_attempts=16,
-            timeout=900,
-            comparison_dpi=150,
-            ghostscript=None,
-            force=force,
+            target_bytes=target_bytes,
+            overwrite=force,
         )
+        result = None
         try:
-            with redirect_stderr(writer), redirect_stdout(writer):
-                exit_code = run(args)
+            result = compress_pdf(
+                request, on_progress=lambda event: self.messages.put(("progress", event))
+            )
         except (CompressionError, OSError) as exc:
-            writer.write(f"Error: {exc}\n")
-            exit_code = 2
+            self.messages.put(("log", f"Error: {exc}\n"))
         except Exception as exc:  # Keep unexpected errors visible in the UI.
-            writer.write(f"Unexpected error: {exc}\n")
-            exit_code = 2
-        self.messages.put(("done", exit_code, source, output, target_bytes))
+            self.messages.put(("log", f"Unexpected error: {exc}\n"))
+        self.messages.put(("done", result))
 
     def _drain_messages(self) -> None:
         try:
             while True:
                 message = self.messages.get_nowait()
-                if message[0] == "log":
-                    content = message[1]
-                    self._append_log(content)
-                    if content.startswith("Trying profile"):
+                if message[0] == "progress":
+                    event = message[1]
+                    self._append_log(describe_progress(event))
+                    if isinstance(event, AttemptStarted):
                         self.status.set("Comparing compression options…")
+                elif message[0] == "log":
+                    self._append_log(message[1])
                 elif message[0] == "done":
-                    _, exit_code, source, output, target_bytes = message
-                    self.progress.stop()
-                    self.compress_button.configure(state="normal")
-                    if exit_code == 0 and output.is_file():
-                        actual_size = output.stat().st_size
-                        source_size = source.stat().st_size
-                        if actual_size <= source_size:
-                            savings = 100 * (1 - actual_size / source_size)
-                            change = f"{savings:.1f}% smaller"
-                        else:
-                            increase = 100 * (actual_size / source_size - 1)
-                            change = f"{increase:.1f}% larger than source"
-                        self.status.set(f"Done — {human_size(actual_size)}; {change}.")
-                    else:
-                        self.status.set("Could not meet the requested size limit.")
+                    self._finish(message[1])
         except queue.Empty:
             pass
         self.root.after(100, self._drain_messages)
+
+    def _finish(self, result) -> None:
+        self.progress.stop()
+        self.compress_button.configure(state="normal")
+        if result is None:
+            self.status.set("Compression failed; see the details below.")
+        elif result.status is ResultStatus.TARGET_NOT_MET:
+            self._append_log(describe_target_not_met(result, cli_hint=False) + "\n")
+            self.status.set("Could not meet the requested size limit.")
+        else:
+            self._append_log(describe_success(result) + "\n")
+            actual_size = result.selected.size_bytes
+            if actual_size <= result.source_bytes:
+                savings = 100 * (1 - actual_size / result.source_bytes)
+                change = f"{savings:.1f}% smaller"
+            else:
+                increase = 100 * (actual_size / result.source_bytes - 1)
+                change = f"{increase:.1f}% larger than source"
+            self.status.set(f"Done — {human_size(actual_size)}; {change}.")
 
     def _clear_log(self) -> None:
         self.log.configure(state="normal")

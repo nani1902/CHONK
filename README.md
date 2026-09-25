@@ -51,7 +51,7 @@ To build a local desktop bundle, install PyInstaller and run:
 ```bash
 python -m pip install pyinstaller
 python -m PyInstaller --noconfirm --clean --windowed --name CHONK \
-  --collect-all pypdfium2 --collect-all pypdfium2_raw \
+  --paths src --collect-all pypdfium2 --collect-all pypdfium2_raw \
   --add-data "THIRD_PARTY_NOTICES.md:." app.py
 ```
 
@@ -132,6 +132,39 @@ compression log; previews, per-page controls, and batch processing are future
 work. Competitor feature pages: [PDF24 Creator](https://tools.pdf24.org/en/creator),
 [Stirling PDF](https://github.com/Stirling-Tools/Stirling-PDF), and
 [Acrobat compression](https://helpx.adobe.com/acrobat/web/share-review-and-export/export-and-print/compress-pdfs.html).
+
+## Code layout and tests
+
+`app.py` and `pdf_compressor.py` are compatibility launchers. The
+implementation is the `chonk` package in `src/chonk/`: `engine.py`
+orchestrates inspection, the profile search (`search.py`), the Ghostscript
+backend (`backends/ghostscript.py`), and output checks (`validation/`). The
+engine takes a typed `CompressionRequest`, reports progress through typed
+events, and returns a `CompressionResult`; it does not print or import a user
+interface. `adapters/` holds the command line and shared text formatting.
+
+```python
+from pathlib import Path
+from chonk import CompressionRequest, compress_pdf, parse_size
+
+result = compress_pdf(
+    CompressionRequest(
+        source=Path("input.pdf"),
+        output=Path("smaller.pdf"),
+        target_bytes=parse_size("2MB"),
+    )
+)
+print(result.status.value, result.attempt_count)
+```
+
+This Python API is internal and may change before a versioned contract is
+published. To run the tests (Ghostscript tests are skipped when `gs` is not
+installed, desktop tests when Tkinter is unavailable):
+
+```bash
+python -m pip install -e ".[test]"
+python -m pytest
+```
 
 ## Product development plan
 
