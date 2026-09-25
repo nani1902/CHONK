@@ -17,9 +17,37 @@ Ghostscript version in use. `openssl` and `git` enable one extra check each
 and are skipped when missing.
 
 Checked on Linux with Ghostscript 10.02.1: on Python 3.10 and 3.11 with
-current dependencies, and on Python 3.11 with the lowest versions
+current dependencies, and on Python 3.10 and 3.11 with the lowest versions
 `requirements.txt` and `requirements-dev.txt` allow. The suite takes about 15
 seconds.
+
+## Continuous integration
+
+`.github/workflows/tests.yml` runs the suite on every push and pull request:
+
+| Job | Runner | Python | Dependencies |
+|---|---|---|---|
+| Linux, current | `ubuntu-24.04`, Ghostscript 10.02.1 | 3.10, 3.11 | `requirements-dev.txt` |
+| Linux, lowest | `ubuntu-24.04`, Ghostscript 10.02.1 | 3.10 | Every `>=` floor in the requirement files, pinned with `==` by `.github/scripts/lowest_requirements.py` |
+| Windows | `windows-latest`, current Ghostscript from Chocolatey | 3.11 | `requirements-dev.txt` |
+
+A local skip is acceptable, but a CI skip fails the job.
+`.github/scripts/check_no_skips.py` reads the JUnit report and fails on
+any skipped test. Without that check, a runner without Ghostscript, `git`,
+or `openssl` would pass while testing less. Expected failures are allowed,
+and `xfail_strict` still fails the run if one of them passes. Each
+requirement must have a `>=` floor, or the lowest-versions job fails. This
+means a new dependency cannot bypass that job.
+
+The Linux jobs use `ubuntu-24.04` instead of `ubuntu-latest`. Some
+integration tests record Ghostscript behavior, so a runner image upgrade
+must not change the Ghostscript version without review.
+
+The Windows job is non-blocking (`continue-on-error`). Windows is not a
+supported platform yet because CHONK-002 has not chosen the pilot OS, and it
+uses a newer Ghostscript than the baseline. Its failures are shown, but
+they do not fail the workflow. After CHONK-002 selects a pilot OS, make that
+job blocking or remove it.
 
 ## Layout
 
