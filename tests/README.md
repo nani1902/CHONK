@@ -18,8 +18,7 @@ and are skipped when missing.
 
 Checked on Linux with Ghostscript 10.02.1: on Python 3.10 and 3.11 with
 current dependencies, and on Python 3.11 with the lowest versions
-`requirements.txt` and `requirements-dev.txt` allow, except that pypdfium2
-must be 5.0 or newer (see the findings below). The suite takes about 15
+`requirements.txt` and `requirements-dev.txt` allow. The suite takes about 15
 seconds.
 
 ## Layout
@@ -101,4 +100,4 @@ this task:
 - Encrypted PDFs are refused even when the user password is empty.
 - `pypdfium2` 4.x cannot run the baseline: `compare_visual_similarity` uses
   `PdfDocument` as a context manager, which requires pypdfium2 5.0.
-  `requirements.txt` still allows `>=4.30`.
+  `requirements.txt` now requires `>=5.0`.
