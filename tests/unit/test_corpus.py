@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 import shutil
 import subprocess
@@ -50,17 +51,21 @@ def test_reproducible_in_a_fresh_interpreter():
         "from corpus import FIXTURES;"
         "print(hashlib.sha256(b''.join(s.build() for s in FIXTURES)).hexdigest())"
     )
-    digests = {
-        subprocess.run(
+    digests = set()
+    for seed in (1, 2):
+        env = {"PYTHONHASHSEED": str(seed), "PATH": ""}
+        if os.name == "nt":
+            # CPython on Windows needs SystemRoot to start a child interpreter.
+            env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
+        result = subprocess.run(
             [sys.executable, "-c", script],
             cwd=REPO_ROOT,
-            env={"PYTHONHASHSEED": str(seed), "PATH": ""},
+            env=env,
             capture_output=True,
             text=True,
-            check=True,
-        ).stdout.strip()
-        for seed in (1, 2)
-    }
+        )
+        assert result.returncode == 0, result.stderr
+        digests.add(result.stdout.strip())
     assert len(digests) == 1
 
 
@@ -184,7 +189,7 @@ def test_signature_verifies_with_openssl(tmp_path):
         [
             openssl, "cms", "-verify", "-binary", "-inform", "DER",
             "-in", "signature.der", "-content", "content.bin",
-            "-CAfile", "signer.pem", "-purpose", "any", "-out", "/dev/null",
+            "-CAfile", "signer.pem", "-purpose", "any", "-out", os.devnull,
         ],
         cwd=tmp_path,
         capture_output=True,
