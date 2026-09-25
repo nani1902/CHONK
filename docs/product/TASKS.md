@@ -1,6 +1,6 @@
 # Implementation backlog
 
-All tasks below are **not started**. The documents are specifications; no runtime feature should be considered delivered because it appears here. These task descriptions can be copied into GitHub issues without further decomposition for initial assignment. Creating this file does not create issues or assign people.
+All tasks below are **not started** unless a task has a status line. The documents are specifications; no runtime feature should be considered delivered because it appears here. These task descriptions can be copied into GitHub issues without further decomposition for initial assignment. Creating this file does not create issues or assign people.
 
 References: [requirements](PRODUCT_REQUIREMENTS.md), [architecture](ARCHITECTURE.md), [release gates](VALIDATION.md).
 
@@ -83,6 +83,7 @@ Owner fields name a responsibility, not a person. One developer may fill several
 
 ### CHONK-006 — File grants and race-safe publication
 
+- Status: in progress. POSIX primitives and filesystem/authorization tests exist in `src/chonk/runtime/files.py` and `tests/security/test_files.py`. Not yet wired into any engine, job, CLI, or MCP path. Started before 004, so reason codes are defined locally (`FileReason`), including two proposed additions, `ARTIFACT_MISMATCH` and `PLATFORM_UNSUPPORTED`, for 004 to adopt or rename. Open items: Windows support (currently fails closed), running the tests on macOS (the `renameatx_np` path has not been exercised), and the owner-only workspace directory (013).
 - Priority / size / owner: P0 / L / runtime + security.
 - Dependencies: 004.
 - Files: `runtime/files.py`, authorization and filesystem tests.

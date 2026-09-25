@@ -1,0 +1,4 @@
+# Test configuration only. CHONK-003 adds packaging metadata and entrypoints.
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
