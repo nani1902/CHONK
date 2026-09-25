@@ -39,9 +39,27 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+SOURCE_BULK_KEY = "/ChonkTestSourceBulk"
+SOURCE_BULK_BYTES = 200_000
+
+
+def add_source_bulk(path: Path, size: int = SOURCE_BULK_BYTES) -> Path:
+    """Pad ``path`` with metadata that ``PaddingBackend`` drops, so candidates
+    are smaller than the source, as with real compression. Without it every
+    candidate would be larger and a source under the ceiling would take the
+    unchanged-source path instead of the search."""
+    writer = PdfWriter(clone_from=str(path))
+    writer.add_metadata({SOURCE_BULK_KEY: "x" * size})
+    with path.open("wb") as stream:
+        writer.write(stream)
+    return path
+
+
 class PaddingBackend:
-    """Test backend: copies the source and pads its metadata so output size is
-    a controlled function of the profile. Rendering is unchanged."""
+    """Test backend: copies the source's pages, without its document info
+    (and so without ``add_source_bulk`` padding), and pads the metadata so
+    output size is a controlled function of the profile. Rendering is
+    unchanged."""
 
     def __init__(self, padding_for: Callable[[Profile], int]):
         self.padding_for = padding_for
@@ -49,7 +67,8 @@ class PaddingBackend:
 
     def compress(self, source: Path, output: Path, profile: Profile, *, timeout: int) -> None:
         self.calls.append(profile)
-        writer = PdfWriter(clone_from=str(source))
+        writer = PdfWriter()
+        writer.append(str(source))  # Pages only: the document info is not copied.
         writer.add_metadata({"/ChonkTestPadding": "x" * self.padding_for(profile)})
         with output.open("wb") as stream:
             writer.write(stream)
@@ -57,7 +76,7 @@ class PaddingBackend:
 
 @pytest.fixture
 def image_pdf(tmp_path: Path) -> Path:
-    return make_image_pdf(tmp_path / "source.pdf", pages=2)
+    return add_source_bulk(make_image_pdf(tmp_path / "source.pdf", pages=2))
 
 
 @pytest.fixture

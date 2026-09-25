@@ -48,7 +48,13 @@ class FeaturePresence(str, Enum):
 
 
 class ImageOnlyPages(str, Enum):
-    """How a policy treats pages without an existing text layer."""
+    """How a policy treats content pages without an existing text layer
+    (``image_only`` and ``graphics_only`` pages; blank pages are exempt).
+
+    ``block`` is enforced at preflight through the ``text_layer`` check. Under
+    ``review``, such pages never block; review of a rewritten output is decided
+    by the preservation and visual validators.
+    """
 
     REVIEW = "review"
     BLOCK = "block"
@@ -91,6 +97,7 @@ class PolicyDefinition:
     not_applicable_allowed: frozenset[CheckId]
     blocked_features: frozenset[Feature]
     image_only_pages: ImageOnlyPages
+    """``block`` requires ``text_layer`` as a hard check."""
 
     def __post_init__(self) -> None:
         overlap = set(self.required_checks) & set(self.advisory_checks)
@@ -102,6 +109,8 @@ class PolicyDefinition:
             raise ValueError(f"{self.policy_id}: feature support must be a required check")
         if not self.not_applicable_allowed <= set(self.checks):
             raise ValueError(f"{self.policy_id}: not_applicable_allowed names unknown checks")
+        if self.image_only_pages is ImageOnlyPages.BLOCK and CheckId.TEXT_LAYER not in self.required_checks:
+            raise ValueError(f"{self.policy_id}: blocking pages without text requires the text_layer check")
 
     @property
     def policy_id(self) -> str:

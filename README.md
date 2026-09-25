@@ -115,7 +115,8 @@ CHONK also refuses a PDF when it cannot rule these features out. That happens
 when the file is damaged in a way that hides part of its structure, when it
 holds a script object that nothing references, or when the parser and the
 renderer disagree about the page count. Refusals exit with status 2, name
-the features involved, and leave the original untouched.
+the features involved, and leave the original untouched. A refused PDF is
+refused even when it is already under the ceiling.
 
 This is stricter than earlier versions of CHONK, which compressed PDFs with
 links, bookmarks, annotations, forms, or signatures and silently lost or
@@ -128,14 +129,21 @@ preservation are added.
 
 ## How the search works
 
-1. Try to preserve source image resolution and pass through supported JPEG and
-   JPEG 2000 images.
-2. If that exceeds the ceiling, search profiles that balance image resolution
+CHONK copies the input once into a private working folder, then inspects and
+compresses that copy. If the original changes before the output is written,
+CHONK writes nothing and asks you to try again.
+
+1. If the PDF is already at or under the ceiling, write an exact copy of it.
+   The PDF is not rewritten, so nothing can be lost or enlarged, and
+   Ghostscript does not run.
+2. Otherwise, try to preserve source image resolution and pass through
+   supported JPEG and JPEG 2000 images.
+3. If that exceeds the ceiling, search profiles that balance image resolution
    and image quality.
-3. Render all pages of each tested candidate with PDFium and compare them to
+4. Render all pages of each tested candidate with PDFium and compare them to
    the source. Select the highest similarity among the tested candidates that
    fit the ceiling.
-4. Validate the output PDF, page count, and final byte size before writing it.
+5. Validate the output PDF, page count, and final byte size before writing it.
 
 The finite search is a practical quality optimization, not a guarantee of a
 global optimum or a perfect measure of human perception. Long PDFs can take

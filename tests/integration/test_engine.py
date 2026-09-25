@@ -160,15 +160,17 @@ def test_candidate_with_changed_page_count_fails(image_pdf, tmp_path):
                 writer.write(stream)
 
     output = tmp_path / "out.pdf"
+    target = image_pdf.stat().st_size - 1  # Below the source, so the search runs.
     with pytest.raises(CompressionError, match="page count changed"):
-        compress_pdf(request(image_pdf, output, 10_000_000), backend=DroppingBackend())
+        compress_pdf(request(image_pdf, output, target), backend=DroppingBackend())
     assert not output.exists()
 
 
 def test_default_backend_reports_missing_ghostscript(image_pdf, tmp_path, monkeypatch):
     monkeypatch.setattr("chonk.backends.ghostscript.shutil.which", lambda _name: None)
+    target = image_pdf.stat().st_size - 1  # Below the source, so a backend is needed.
     with pytest.raises(CompressionError, match="Ghostscript was not found"):
-        compress_pdf(request(image_pdf, tmp_path / "out.pdf", 10_000_000))
+        compress_pdf(request(image_pdf, tmp_path / "out.pdf", target))
 
 
 @pytest.mark.parametrize(

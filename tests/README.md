@@ -115,7 +115,6 @@ Baseline findings recorded this way:
 
 | Owner | Finding |
 |---|---|
-| CHONK-007 | An input that already fits is still rewritten, and the rewrite is larger (standard fonts get embedded). With a ceiling equal to its own size, the tool reports "No tested profile reached the size ceiling" |
 | CHONK-008 | `validate_pdf` misses reordered, rotated, resized, and blanked pages, changed digits, a removed text layer, and removed form values |
 | CHONK-009 | Mean page similarity dilutes one damaged page by the page count. Renders never initialize forms, so field values are invisible to the comparison |
 | CHONK-010 | Search reports failure when both endpoints miss although an interior profile fits. It reports the last endpoint rather than the smallest tested size. On a non-monotonic ladder it misses the best fitting profile even with a full budget |
@@ -128,6 +127,12 @@ Closed since the baseline:
   Ghostscript runs. Signatures are no longer silently invalidated, and form
   values are no longer flattened. Each fixture records its expected preflight
   decision under the default policy (`preflight` in `corpus/catalog.py`).
+- CHONK-007 copies a supported input that already fits, byte for byte,
+  instead of rewriting it. The baseline rewrote it larger (standard fonts got
+  embedded), and with a ceiling equal to its own size it reported "No tested
+  profile reached the size ceiling". Because a generous ceiling no longer
+  rewrites anything, the output-quality tests now call the Ghostscript
+  backend directly (`test_backend_output_passes_evaluation`).
 
 Other baseline facts the tests record without treating them as defects of
 this task:

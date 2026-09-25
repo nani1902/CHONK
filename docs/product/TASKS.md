@@ -74,7 +74,7 @@ Owner fields name a responsibility, not a person. One developer may fill several
 
 ### CHONK-005 — Preflight feature inspection
 
-- Status: **implemented** in [`inspection.py`](../../src/chonk/inspection.py), with the [supported-feature matrix](SUPPORTED_FEATURES.md). The engine blocks input before any backend runs. Page kinds are reported, not yet enforced: CHONK-007.
+- Status: **implemented** in [`inspection.py`](../../src/chonk/inspection.py), with the [supported-feature matrix](SUPPORTED_FEATURES.md). The engine blocks input before any backend runs. Page kinds are enforced by CHONK-007.
 - Priority / size / owner: P0 / L / PDF engine.
 - Dependencies: 001, 004.
 - Files: `inspection.py`, fixtures, feature-policy tests.
@@ -103,6 +103,7 @@ Owner fields name a responsibility, not a person. One developer may fill several
 - Priority / size / owner: P0 / M / engine.
 - Dependencies: 005, 006.
 - Files: engine/policies and integration tests.
+- Status: **implemented** in [`engine.py`](../../src/chonk/engine.py) and [`inspection.py`](../../src/chonk/inspection.py); tests in [`test_policy_enforcement.py`](../../tests/integration/test_policy_enforcement.py) and [`test_page_policy.py`](../../tests/unit/test_page_policy.py). The engine works on one private snapshot of the source. Before publishing, it compares the original with that snapshot, and a change blocks the job with `SOURCE_CHANGED`. The engine takes a snapshot itself because 006's grants are not yet wired into it (012/021). `require-searchable-v1` blocks image-only and graphics-only pages, and all-blank documents, with `TEXT_LAYER_MISSING`; an unclassifiable page blocks with `VALIDATION_INCONCLUSIVE`. The other policies never block on page kinds. A supported file within the ceiling is copied byte for byte with every policy check closed and `completion_basis: unchanged_source`. Compressed results record only the size, feature, and text-layer checks and carry no completion basis until 008/009 decide the rest. Review of rewritten scans is therefore not yet enforced.
 - Work: enforce feature restrictions and policy applicability; handle already-small supported inputs without rewriting.
 - Acceptance:
   - An already-small eligible file produces byte-identical output and `unchanged_source` evidence.

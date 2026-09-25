@@ -3,8 +3,8 @@
 :func:`inspect_pdf` reads a PDF without modifying it and returns an
 :class:`InspectionReport`: a document-feature inventory, per-page geometry and
 content classification, and any condition that limited the inspection.
-:func:`evaluate_preflight` applies a policy's feature restrictions to a report;
-the engine refuses to run a backend unless the result is ``pass``.
+:func:`evaluate_preflight` applies a policy's feature and page restrictions to
+a report; the engine refuses to run a backend unless the decision allows it.
 
 The inventory is conservative. Each feature is ``present``, ``absent``, or
 ``unknown``, and ``absent`` is reported only when every applicable detector ran
@@ -49,8 +49,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Iterator, Mapping
 
-from chonk.models import CheckState, CompressionError, ReasonCode
-from chonk.policies import Feature, FeaturePresence, PolicyDefinition
+from chonk.models import CheckId, CheckState, CompressionError, ReasonCode
+from chonk.policies import Feature, FeaturePresence, ImageOnlyPages, PolicyDefinition
 
 try:
     from pypdf import PdfReader
@@ -223,31 +223,98 @@ class InspectionReport:
         return counts
 
 
+TEXT_LAYER_PAGE_KINDS = frozenset({PageKind.TEXT, PageKind.MIXED})
+"""Pages with a usable existing text layer."""
+NO_TEXT_LAYER_PAGE_KINDS = frozenset({PageKind.IMAGE_ONLY, PageKind.GRAPHICS_ONLY})
+"""Content pages without a text layer. Blank pages carry no content and are
+exempt from text-layer requirements; ``unknown`` pages are neither."""
+
+
+@dataclass(frozen=True)
+class TextLayerEvaluation:
+    """Whether every content page of the source has a usable text layer."""
+
+    state: CheckState
+    pages_without_text: tuple[int, ...]
+    """Zero-based indices of ``image_only`` and ``graphics_only`` pages."""
+    pages_unknown: tuple[int, ...]
+    """Zero-based indices of pages whose text layer could not be established."""
+
+
+def evaluate_text_layer(report: InspectionReport) -> TextLayerEvaluation:
+    """Decide the ``text_layer`` check for a source from its page kinds.
+
+    ``fail`` if any content page has no text layer, or if no page has one
+    (for example an all-blank document: there is nothing to search). Otherwise
+    ``unknown`` if any page could not be classified, or if pages were not
+    classified at all. Blank pages are exempt; ``pass`` needs at least one
+    ``text`` or ``mixed`` page and every other page ``blank``.
+    """
+    pages = report.pages
+    if not report.readable or report.page_count is None or len(pages) != report.page_count:
+        return TextLayerEvaluation(CheckState.UNKNOWN, (), ())
+    without = tuple(page.index for page in pages if page.kind in NO_TEXT_LAYER_PAGE_KINDS)
+    unknown = tuple(page.index for page in pages if page.kind is PageKind.UNKNOWN)
+    if without or not any(page.kind in TEXT_LAYER_PAGE_KINDS for page in pages):
+        if not without and unknown:
+            # No page is known to lack text, but some could not be classified.
+            return TextLayerEvaluation(CheckState.UNKNOWN, (), unknown)
+        return TextLayerEvaluation(CheckState.FAIL, without, unknown)
+    if unknown:
+        return TextLayerEvaluation(CheckState.UNKNOWN, (), unknown)
+    return TextLayerEvaluation(CheckState.PASS, (), ())
+
+
 @dataclass(frozen=True)
 class PreflightDecision:
     """A policy's verdict on an inspection report, before any rewrite."""
 
     policy_id: str
     feature_support: CheckState
-    """The ``feature_support`` check. Only ``pass`` allows processing."""
+    """The ``feature_support`` check."""
     reason_codes: tuple[ReasonCode, ...]
     blocking_features: tuple[Feature, ...]
     unknown_features: tuple[Feature, ...]
     blocking_issues: tuple[InspectionIssue, ...]
+    text_layer: TextLayerEvaluation
+    """Evaluated for every policy; it gates processing only when
+    ``text_layer_required``."""
+    text_layer_required: bool
+    """The policy blocks pages without a text layer (``image_only_pages``
+    is ``block``) instead of sending them to review."""
 
     @property
     def allowed(self) -> bool:
-        return self.feature_support is CheckState.PASS
+        """Processing may start: ``feature_support`` passed and, if the policy
+        requires one, every content page has a text layer."""
+        if self.feature_support is not CheckState.PASS:
+            return False
+        return not self.text_layer_required or self.text_layer.state is CheckState.PASS
+
+    @property
+    def checks(self) -> dict[CheckId, CheckState]:
+        """Contract checks decided by preflight for this policy."""
+        checks = {CheckId.FEATURE_SUPPORT: self.feature_support}
+        if self.text_layer_required:
+            checks[CheckId.TEXT_LAYER] = self.text_layer.state
+        return checks
 
 
 def evaluate_preflight(report: InspectionReport, policy: PolicyDefinition) -> PreflightDecision:
-    """Apply ``policy``'s feature restrictions to ``report``.
+    """Apply ``policy``'s feature and page restrictions to ``report``.
 
     Unreadable input fails with ``MALFORMED_INPUT``. A blocking inspection
     issue makes an otherwise clean inventory ``unknown`` with
     ``INSPECTION_INCONCLUSIVE``: an inspection that could not finish never
     counts as evidence of absence.
+
+    A policy whose ``image_only_pages`` is ``block`` also requires the
+    ``text_layer`` check to pass: a missing layer adds ``TEXT_LAYER_MISSING``,
+    and an undecidable one adds ``VALIDATION_INCONCLUSIVE`` unless another
+    reason already blocks the file.
     """
+    text_layer = evaluate_text_layer(report)
+    text_layer_required = policy.image_only_pages is ImageOnlyPages.BLOCK
     if not report.readable:
         return PreflightDecision(
             policy_id=policy.policy_id,
@@ -256,6 +323,8 @@ def evaluate_preflight(report: InspectionReport, policy: PolicyDefinition) -> Pr
             blocking_features=(),
             unknown_features=(),
             blocking_issues=(),
+            text_layer=text_layer,
+            text_layer_required=text_layer_required,
         )
     evaluation = policy.evaluate_features(report.features)
     state = evaluation.check_state
@@ -266,6 +335,11 @@ def evaluate_preflight(report: InspectionReport, policy: PolicyDefinition) -> Pr
             reasons.append(ReasonCode.INSPECTION_INCONCLUSIVE)
         if state is CheckState.PASS:
             state = CheckState.UNKNOWN
+    if text_layer_required:
+        if text_layer.state is CheckState.FAIL:
+            reasons.append(ReasonCode.TEXT_LAYER_MISSING)
+        elif text_layer.state is CheckState.UNKNOWN and not reasons:
+            reasons.append(ReasonCode.VALIDATION_INCONCLUSIVE)
     return PreflightDecision(
         policy_id=policy.policy_id,
         feature_support=state,
@@ -273,6 +347,8 @@ def evaluate_preflight(report: InspectionReport, policy: PolicyDefinition) -> Pr
         blocking_features=evaluation.blocking,
         unknown_features=evaluation.unknown,
         blocking_issues=issues,
+        text_layer=text_layer,
+        text_layer_required=text_layer_required,
     )
 
 

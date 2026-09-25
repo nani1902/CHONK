@@ -353,8 +353,10 @@ class ChonkApp:
             self.status.set("Could not meet the requested size limit.")
         else:
             self._append_log(describe_success(result) + "\n")
-            actual_size = result.selected.size_bytes
-            if actual_size <= result.source_bytes:
+            actual_size = result.output_bytes
+            if result.unchanged_source:
+                change = "already within the limit, copied unchanged"
+            elif actual_size <= result.source_bytes:
                 savings = 100 * (1 - actual_size / result.source_bytes)
                 change = f"{savings:.1f}% smaller"
             else:

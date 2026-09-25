@@ -16,9 +16,10 @@ import pytest
 from pypdf import PdfReader
 
 import pdf_compressor
+from chonk.backends.ghostscript import GhostscriptBackend
+from chonk.search import build_profiles
 from corpus import FIXTURES, fixture_bytes
 from evaluation import evaluate
-from gaps import known_gap
 from support import FileState, copy_fixture
 
 FAST = ("--max-attempts", "4", "--comparison-dpi", "36")
@@ -55,6 +56,8 @@ def test_generous_ceiling(ghostscript, corpus_dir, tmp_path, run_cli, spec):
     if result.exit_code == 0:
         assert output.stat().st_size <= target
         assert page_count(output) == page_count(source)
+        # Since CHONK-007, a supported source that already fits is copied as is.
+        assert output.read_bytes() == source.read_bytes()
         assert_only(tmp_path, source.name, output.name)
     else:
         assert result.exit_code == 2
@@ -145,11 +148,17 @@ PRESERVED = ["text-statement", "text-multipage", "text-tiny", "image-scan", "ima
 
 
 @pytest.mark.parametrize("name", PRESERVED)
-def test_output_passes_evaluation(ghostscript, corpus_dir, tmp_path, run_cli, name):
-    target = 10 * len(fixture_bytes(name))
-    source, output, result = compress(run_cli, corpus_dir, tmp_path, name, f"{target}B")
-    assert result.exit_code == 0, result.stderr
-    evaluation = evaluate(source.read_bytes(), output.read_bytes(), target_bytes=target)
+def test_backend_output_passes_evaluation(ghostscript, corpus_dir, tmp_path, name):
+    """The highest-clarity rewrite of every supported fixture passes evaluation.
+
+    Since CHONK-007 the CLI copies a source that already fits instead of
+    rewriting it, so the rewrite that a generous ceiling used to select (the
+    first profile) is produced through the backend directly."""
+    source = copy_fixture(corpus_dir, name, tmp_path)
+    output = tmp_path / "rewritten.pdf"
+    backend = GhostscriptBackend.discover(ghostscript)
+    backend.compress(source, output, build_profiles(600, 72)[0], timeout=120)
+    evaluation = evaluate(source.read_bytes(), output.read_bytes())
     assert evaluation.passed, evaluation.findings
 
 
@@ -177,14 +186,13 @@ def test_signed_input_is_not_rewritten(ghostscript, corpus_dir, tmp_path, run_cl
     assert "digitally signed" in result.stderr
 
 
-@known_gap("CHONK-007", "an input that already fits is still rewritten")
+# Closed by CHONK-007: a supported source that already fits is not rewritten.
 def test_already_small_input_is_published_unchanged(ghostscript, corpus_dir, tmp_path, run_cli):
     source, output, result = compress(run_cli, corpus_dir, tmp_path, "already-small", "1MB")
     assert result.exit_code == 0
     assert output.read_bytes() == source.read_bytes()
 
 
-@known_gap("CHONK-007", "the rewrite can exceed a ceiling the original already meets")
 def test_input_that_already_fits_is_never_reported_as_target_not_met(
     ghostscript, corpus_dir, tmp_path, run_cli
 ):

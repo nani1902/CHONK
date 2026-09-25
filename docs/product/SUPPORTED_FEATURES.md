@@ -53,7 +53,23 @@ PDFium classifies each page. PDFium is the renderer that visual comparison uses.
 
 A usable character is a letter, digit, punctuation mark, or symbol. Whitespace, soft hyphens, and zero-width marks count as neither usable nor unmappable. Control, private-use, unassigned, and replacement characters are unmappable.
 
-Inspection reports page kinds and the geometry of each page: media box, crop box, rotation, and user unit. Version 1 does not enforce page kinds. Policies define what should happen to them (`image_only_pages`: `review` or `block`), and CHONK-007 enforces that, for example by blocking scans under `require-searchable-v1`.
+Inspection reports page kinds and the geometry of each page: media box, crop box, rotation, and user unit.
+
+Page kinds decide the `text_layer` check. `blank` pages carry no content and are exempt. The check passes only when at least one page is `text` or `mixed` and every other page is `blank`:
+
+| Pages | `text_layer` |
+|---|---|
+| Any `image_only` or `graphics_only` page | `fail`, naming those pages |
+| No `text` or `mixed` page at all, for example an all-blank document | `fail` |
+| Otherwise, any `unknown` page | `unknown`, naming those pages |
+| Otherwise | `pass` |
+
+A policy's `image_only_pages` setting decides what the check does:
+
+- **`block`** (`require-searchable-v1`): `text_layer` is a hard check, applied at preflight before any backend runs and whatever the file's size. `fail` blocks with `TEXT_LAYER_MISSING`. `unknown` blocks with `VALIDATION_INCONCLUSIVE` if nothing else already blocks the file. CHONK does not add OCR.
+- **`review`** (`preserve-existing-text-v1`, `scan-review-v1`): page kinds never block. For a rewritten output, review is decided by the preservation and visual validators (CHONK-008, CHONK-009).
+
+A supported file that already fits the ceiling is published unchanged. Its text-preservation check is `not_applicable` only when every page is `image_only`, `graphics_only`, or `blank`; otherwise it passes, because the bytes are identical.
 
 ## 3. Inspection issues
 

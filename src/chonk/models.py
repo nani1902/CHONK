@@ -103,8 +103,8 @@ class ResultStatus(str, Enum):
     """Outcome of one file. See ``docs/product/ARCHITECTURE.md`` section 4.
 
     The engine currently produces ``READY``, ``TARGET_NOT_MET``, and ``BLOCKED``
-    (preflight refused the input); the other states are defined by the
-    contract for the stages that produce them.
+    (preflight refused the input, or the source changed during the run); the
+    other states are defined by the contract for the stages that produce them.
     """
 
     READY = "ready"
@@ -123,11 +123,13 @@ class CompressionResult:
     """Published output path; ``None`` unless the status is ``READY``."""
     target_bytes: int
     source_bytes: int
+    """Size of the source snapshot the checks ran on; the file's reported size
+    if the source changed before a snapshot could be taken."""
     page_count: int | None
     """``None`` only when preflight could not read the document."""
     comparison_dpi: int
     selected: AttemptRecord | None
-    """The published attempt; ``None`` unless the status is ``READY``."""
+    """The published attempt; ``None`` unless a compressed output is ``READY``."""
     smallest: AttemptRecord | None
     """The smallest tested attempt; ``None`` when nothing was attempted."""
     attempts: tuple[AttemptRecord, ...]
@@ -139,10 +141,32 @@ class CompressionResult:
     """The preflight report. It holds no document content."""
     preflight: PreflightDecision | None = None
     """The policy's verdict on ``inspection``."""
+    checks: Mapping[CheckId, CheckState] = field(default_factory=dict)
+    """Contract checks the engine has decided so far. A check that is absent was
+    not evaluated and counts as ``unknown``. Only an unchanged-source result
+    carries every check of its policy; for a compressed output the page,
+    text, and visual checks belong to the validators (CHONK-008, CHONK-009)."""
+    completion_basis: CompletionBasis | None = None
+    """Why a ``READY`` result is ready, once every check its policy names is
+    decided. Currently set only for ``UNCHANGED_SOURCE``."""
 
     @property
     def attempt_count(self) -> int:
         return len(self.attempts)
+
+    @property
+    def unchanged_source(self) -> bool:
+        """The published output is a byte-identical copy of the source."""
+        return self.completion_basis is CompletionBasis.UNCHANGED_SOURCE
+
+    @property
+    def output_bytes(self) -> int | None:
+        """Size of the published output; ``None`` when nothing was published."""
+        if self.status is not ResultStatus.READY:
+            return None
+        if self.unchanged_source:
+            return self.source_bytes
+        return self.selected.size_bytes if self.selected is not None else None
 
 
 @dataclass(frozen=True)

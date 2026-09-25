@@ -54,6 +54,13 @@ def describe_progress(event: ProgressEvent) -> str:
 
 def describe_success(result: CompressionResult) -> str:
     assert result.status is ResultStatus.READY
+    if result.unchanged_source:
+        return (
+            f"Saved {result.output}\n"
+            f"The input is already within the ceiling "
+            f"({human_size(result.source_bytes)}; ceiling {human_size(result.target_bytes)}), "
+            "so it was copied unchanged instead of being compressed."
+        )
     assert result.selected is not None
     return (
         f"Saved {result.output}\n"
@@ -85,8 +92,19 @@ def _join(labels: list[str]) -> str:
     return ", ".join(labels[:-1]) + ", and " + labels[-1]
 
 
+def _pages(indices: tuple[int, ...], limit: int = 5) -> str:
+    """``Page 3`` or ``Pages 1, 2, and 4`` (one-based); long lists are cut."""
+    if not indices:
+        return "Some pages"
+    numbers = [str(index + 1) for index in indices[:limit]]
+    if len(indices) > limit:
+        numbers.append(f"{len(indices) - limit} more")
+    return ("Page " if len(indices) == 1 else "Pages ") + _join(numbers)
+
+
 def describe_blocked(result: CompressionResult) -> str:
-    """Explain why preflight refused the input. Names features, never content."""
+    """Explain why the input was refused. Names features and page numbers,
+    never content."""
     assert result.status is ResultStatus.BLOCKED
     reasons = set(result.reason_codes)
     decision = result.preflight
@@ -133,7 +151,35 @@ def describe_blocked(result: CompressionResult) -> str:
                 lines.append("The page renderer could not open this PDF.")
             if InspectionIssue.PAGE_COUNT_MISMATCH in issues:
                 lines.append("PDF readers disagree about how many pages this PDF has.")
+    if ReasonCode.TEXT_LAYER_MISSING in reasons and decision is not None:
+        pages = decision.text_layer.pages_without_text
+        if pages:
+            lines.append(
+                f"{_pages(pages)} {'has' if len(pages) == 1 else 'have'} no text layer "
+                f"(scanned or drawn without searchable text), and policy {result.policy_id} "
+                "requires one on every page. CHONK does not add OCR: run OCR first, or "
+                "choose a policy that allows scans."
+            )
+        else:
+            lines.append(
+                f"This PDF has no searchable text, and policy {result.policy_id} requires "
+                "it. CHONK does not add OCR."
+            )
+    if ReasonCode.VALIDATION_INCONCLUSIVE in reasons and decision is not None:
+        pages = decision.text_layer.pages_unknown
+        lines.append(
+            f"CHONK could not confirm a usable text layer on {_pages(pages).lower()}, "
+            f"and policy {result.policy_id} requires one on every page."
+        )
+    if ReasonCode.SOURCE_CHANGED in reasons:
+        lines.append(
+            "The input file changed while CHONK was working on it. Try again once "
+            "nothing else is writing to it."
+        )
     if not lines:
         lines.append("This PDF is not supported.")
-    lines.append("No output was written; the original is unchanged.")
+    if ReasonCode.SOURCE_CHANGED in reasons:
+        lines.append("No output was written; CHONK did not modify the original.")
+    else:
+        lines.append("No output was written; the original is unchanged.")
     return "\n".join(lines)

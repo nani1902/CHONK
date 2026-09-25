@@ -11,6 +11,7 @@ import os
 import pytest
 
 from chonk.backends import ghostscript as ghostscript_backend
+from corpus import fixture_bytes
 from support import FileState, copy_fixture
 
 
@@ -32,6 +33,11 @@ def backend(monkeypatch) -> BackendRecorder:
     monkeypatch.setattr(ghostscript_backend, "find_ghostscript", lambda explicit: "fake-gs")
     monkeypatch.setattr(ghostscript_backend.subprocess, "run", recorder)
     return recorder
+
+
+# Below the text-statement fixture's size, so the backend is needed: since
+# CHONK-007 a source that already fits is copied without running it.
+BELOW_TEXT_STATEMENT = f"{len(fixture_bytes('text-statement')) - 1}B"
 
 
 def assert_no_output_written(directory, source):
@@ -65,7 +71,7 @@ def test_unreadable_input_is_rejected_before_ghostscript(corpus_dir, tmp_path, r
 def test_backend_failure_writes_nothing_and_keeps_the_input(corpus_dir, tmp_path, run_cli, backend):
     source = copy_fixture(corpus_dir, "text-statement", tmp_path)
     before = FileState.of(source)
-    result = run_cli(source, "--target-size", "1MB")
+    result = run_cli(source, "--target-size", BELOW_TEXT_STATEMENT)
     assert result.exit_code == 2
     assert "Could not start Ghostscript" in result.stderr
     assert len(backend.calls) == 1
@@ -76,7 +82,7 @@ def test_backend_failure_writes_nothing_and_keeps_the_input(corpus_dir, tmp_path
 def test_missing_ghostscript_is_reported(corpus_dir, tmp_path, run_cli, monkeypatch):
     monkeypatch.setattr(ghostscript_backend.shutil, "which", lambda name: None)
     source = copy_fixture(corpus_dir, "text-statement", tmp_path)
-    result = run_cli(source, "--target-size", "1MB")
+    result = run_cli(source, "--target-size", BELOW_TEXT_STATEMENT)
     assert result.exit_code == 2
     assert "Ghostscript was not found" in result.stderr
     assert_no_output_written(tmp_path, source)

@@ -1,25 +1,43 @@
-"""Compression orchestration: inspect, search, validate, and publish.
+"""Compression orchestration: snapshot, inspect, search, validate, and publish.
 
 The engine does not print, parse arguments, or import a user interface.
 Progress is reported through an optional callback of typed events, and the
-outcome is returned as a :class:`CompressionResult`. Preflight inspection runs
-before any backend: input the request's policy does not support, cannot be
-inspected conclusively, or cannot be read is returned as ``BLOCKED`` without
-running a backend. Expected failures other than a missed size target or a
-blocked input raise :class:`CompressionError`; filesystem failures may raise
-:class:`OSError`.
+outcome is returned as a :class:`CompressionResult`.
+
+Every step works on one private snapshot of the source, copied from a single
+read into a job directory, so inspection, the backend, and publication all see
+the same bytes. The original is never written. Before anything is published
+the original is compared with the snapshot again; if it changed, the result is
+``BLOCKED`` with ``SOURCE_CHANGED`` and nothing is written.
+
+Preflight inspection runs before any backend: input the request's policy does
+not support, cannot be inspected conclusively, or cannot be read is returned as
+``BLOCKED`` without running a backend. A supported source that already fits the
+byte ceiling is published byte for byte, with ``completion_basis``
+``unchanged_source``, and no backend runs either. Expected failures other than a
+missed size target or a blocked input raise :class:`CompressionError`;
+filesystem failures may raise :class:`OSError`.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from chonk.backends import CompressionBackend
 from chonk.backends.ghostscript import GhostscriptBackend
-from chonk.inspection import evaluate_preflight, inspect_pdf
+from chonk.inspection import (
+    NO_TEXT_LAYER_PAGE_KINDS,
+    InspectionReport,
+    PageKind,
+    PreflightDecision,
+    evaluate_preflight,
+    inspect_pdf,
+)
 from chonk.models import (
     MAX_ATTEMPTS,
     MAX_COMPARISON_DPI,
@@ -31,6 +49,9 @@ from chonk.models import (
     AttemptRecord,
     AttemptStarted,
     CandidateMeasured,
+    CheckId,
+    CheckState,
+    CompletionBasis,
     CompressionError,
     CompressionRequest,
     CompressionResult,
@@ -40,6 +61,7 @@ from chonk.models import (
     OutputExistsError,
     Profile,
     ProgressCallback,
+    ReasonCode,
     ResultStatus,
 )
 from chonk.policies import PolicyDefinition, get_policy
@@ -90,6 +112,91 @@ def validate_request(request: CompressionRequest) -> PolicyDefinition:
         raise InvalidRequestError(exc.message) from exc
 
 
+_CHUNK = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class _Snapshot:
+    """A private copy of the source taken from one read."""
+
+    path: Path
+    size: int
+    sha256: str
+
+
+class _SourceChanged(Exception):
+    """The source changed while it was being copied."""
+
+
+def _snapshot_source(source: Path, workdir: Path) -> _Snapshot:
+    """Copy ``source`` into ``workdir``, hashing the bytes as they are read.
+
+    Raises :class:`_SourceChanged` if the file's size or modification time
+    moved during the copy, or the copy is not the size the file reported.
+    """
+    destination = workdir / "source.pdf"
+    digest = hashlib.sha256()
+    size = 0
+    with source.open("rb") as reader, destination.open("xb") as writer:
+        before = os.fstat(reader.fileno())
+        while chunk := reader.read(_CHUNK):
+            digest.update(chunk)
+            writer.write(chunk)
+            size += len(chunk)
+        after = os.fstat(reader.fileno())
+    if size != before.st_size or (after.st_size, after.st_mtime_ns) != (
+        before.st_size,
+        before.st_mtime_ns,
+    ):
+        raise _SourceChanged
+    return _Snapshot(destination, size, digest.hexdigest())
+
+
+def _sha256(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as stream:
+        while chunk := stream.read(_CHUNK):
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
+
+
+def _source_unchanged(source: Path, snapshot: _Snapshot) -> bool:
+    """The file at ``source`` still holds exactly the snapshot bytes."""
+    try:
+        return _sha256(source) == (snapshot.sha256, snapshot.size)
+    except OSError:
+        return False
+
+
+_NO_TEXT_PAGE_KINDS = NO_TEXT_LAYER_PAGE_KINDS | {PageKind.BLANK}
+
+
+def _unchanged_checks(
+    policy: PolicyDefinition, report: InspectionReport, preflight: PreflightDecision
+) -> dict[CheckId, CheckState]:
+    """Checks for publishing the source's own bytes under ``policy``.
+
+    Identical bytes have the same pages, geometry, extracted text, and
+    rendering as the source, so those checks pass by identity rather than by
+    comparison. Text preservation is ``not_applicable`` only when no page has a
+    text layer (every page is image-only, graphics-only, or blank); the policy
+    decides whether that is acceptable. Feature support and the text layer keep
+    the states preflight decided.
+    """
+    no_text = all(page.kind in _NO_TEXT_PAGE_KINDS for page in report.pages)
+    evidence = {
+        CheckId.SIZE_CEILING: CheckState.PASS,
+        CheckId.PAGE_STRUCTURE: CheckState.PASS,
+        CheckId.EXTRACTED_TEXT: CheckState.NOT_APPLICABLE if no_text else CheckState.PASS,
+        CheckId.TEXT_LAYER: preflight.text_layer.state,
+        CheckId.VISUAL_POLICY: CheckState.PASS,
+        **preflight.checks,
+    }
+    return {check: evidence[check] for check in policy.checks}
+
+
 def _record(candidate: Candidate) -> AttemptRecord:
     return AttemptRecord(
         profile_index=candidate.profile_index,
@@ -120,13 +227,18 @@ def _evaluate_candidate(
 
 
 def _publish(
-    candidate: Path,
+    artifact: Path,
     output: Path,
     expected_pages: int,
     target_bytes: int,
     overwrite: bool,
+    expected_sha256: str,
 ) -> None:
-    """Copy a checked candidate to ``output`` through a staged file."""
+    """Copy checked bytes to ``output`` through a staged file.
+
+    The staged copy must hash to ``expected_sha256``, so the published file is
+    exactly the artifact that was checked.
+    """
     output.parent.mkdir(parents=True, exist_ok=True)
     fd, staged_name = tempfile.mkstemp(
         prefix=f".{output.stem}.", suffix=".tmp.pdf", dir=output.parent
@@ -134,7 +246,9 @@ def _publish(
     os.close(fd)
     staged = Path(staged_name)
     try:
-        shutil.copyfile(candidate, staged)
+        shutil.copyfile(artifact, staged)
+        if _sha256(staged)[0] != expected_sha256:
+            raise CompressionError("The staged output does not match the checked bytes.")
         validate_pdf(staged, expected_pages)
         if staged.stat().st_size > target_bytes:
             raise CompressionError(
@@ -156,10 +270,20 @@ def compress_pdf(
     """Compress ``request.source`` to at most ``request.target_bytes``.
 
     ``backend`` defaults to an auto-discovered Ghostscript. The source file is
-    never modified. The source is inspected first; if the request's policy
-    does not allow it, the result status is ``BLOCKED``, the backend is never
-    discovered or run, and no output is written. When no tested profile fits,
-    the result status is ``TARGET_NOT_MET`` and no output is written.
+    never modified. The source is snapshotted and inspected first:
+
+    * If the request's policy does not allow it, the result status is
+      ``BLOCKED``, the backend is never discovered or run, and no output is
+      written, whatever the source's size.
+    * If it is allowed and already at or below the ceiling, its exact bytes are
+      published with ``completion_basis`` ``UNCHANGED_SOURCE``; no backend is
+      discovered or run.
+    * Otherwise the profile search runs. When no tested profile fits, the
+      result status is ``TARGET_NOT_MET`` and no output is written.
+
+    If the source changes before publication, the result is ``BLOCKED`` with
+    ``SOURCE_CHANGED`` and no output is written. The requested policy is never
+    replaced or relaxed.
     """
     policy = validate_request(request)
 
@@ -179,53 +303,104 @@ def compress_pdf(
     if output.exists() and not request.overwrite:
         raise OutputExistsError(output)
 
-    source_bytes = source.stat().st_size
-    report = inspect_pdf(source)
-    preflight = evaluate_preflight(report, policy)
-    if not preflight.allowed:
-        return CompressionResult(
-            status=ResultStatus.BLOCKED,
-            source=source,
-            output=None,
-            target_bytes=request.target_bytes,
-            source_bytes=source_bytes,
-            page_count=report.page_count,
-            comparison_dpi=request.comparison_dpi,
-            selected=None,
-            smallest=None,
-            attempts=(),
-            policy_id=policy.policy_id,
-            reason_codes=preflight.reason_codes,
-            inspection=report,
-            preflight=preflight,
-        )
-    expected_pages = report.page_count
-    assert expected_pages is not None  # An allowed report was fully read.
-
-    if backend is None:
-        backend = GhostscriptBackend.discover()
-    profiles = build_profiles(request.max_dpi, request.min_dpi)
-    output.parent.mkdir(parents=True, exist_ok=True)
-
-    emit(
-        InputInspected(
-            source=source,
-            source_bytes=source_bytes,
-            page_count=expected_pages,
-            target_bytes=request.target_bytes,
-            profile_count=len(profiles),
-        )
-    )
-
-    attempts: list[AttemptRecord] = []
-    with tempfile.TemporaryDirectory(prefix="pdf-compress-") as temporary_dir:
+    with tempfile.TemporaryDirectory(prefix="chonk-job-") as temporary_dir:
         workdir = Path(temporary_dir)
+        base = dict(
+            source=source,
+            target_bytes=request.target_bytes,
+            comparison_dpi=request.comparison_dpi,
+            policy_id=policy.policy_id,
+        )
+
+        def blocked(reasons, source_bytes, report=None, preflight=None, **extra):
+            fields = dict(
+                output=None,
+                selected=None,
+                smallest=None,
+                attempts=(),
+                page_count=report.page_count if report is not None else None,
+                checks=preflight.checks if preflight is not None else {},
+                **base,
+            )
+            fields.update(extra)
+            return CompressionResult(
+                status=ResultStatus.BLOCKED,
+                source_bytes=source_bytes,
+                reason_codes=tuple(reasons),
+                inspection=report,
+                preflight=preflight,
+                **fields,
+            )
+
+        try:
+            snapshot = _snapshot_source(source, workdir)
+        except _SourceChanged:
+            return blocked((ReasonCode.SOURCE_CHANGED,), source.stat().st_size)
+
+        report = inspect_pdf(snapshot.path)
+        preflight = evaluate_preflight(report, policy)
+        if not preflight.allowed:
+            return blocked(preflight.reason_codes, snapshot.size, report, preflight)
+        expected_pages = report.page_count
+        assert expected_pages is not None  # An allowed report was fully read.
+
+        def source_changed(**extra):
+            return blocked(
+                (ReasonCode.SOURCE_CHANGED,), snapshot.size, report, preflight, **extra
+            )
+
+        if snapshot.size <= request.target_bytes:
+            checks = _unchanged_checks(policy, report, preflight)
+            # Unreachable for the v1 policies: every check above is closed.
+            # Should a policy ever refuse the unchanged bytes, search instead.
+            if policy.decide(checks).status is ResultStatus.READY:
+                if not _source_unchanged(source, snapshot):
+                    return source_changed()
+                _publish(
+                    snapshot.path,
+                    output,
+                    expected_pages,
+                    request.target_bytes,
+                    request.overwrite,
+                    snapshot.sha256,
+                )
+                return CompressionResult(
+                    status=ResultStatus.READY,
+                    output=output,
+                    source_bytes=snapshot.size,
+                    page_count=expected_pages,
+                    selected=None,
+                    smallest=None,
+                    attempts=(),
+                    inspection=report,
+                    preflight=preflight,
+                    checks=checks,
+                    completion_basis=CompletionBasis.UNCHANGED_SOURCE,
+                    **base,
+                )
+
+        if backend is None:
+            backend = GhostscriptBackend.discover()
+        profiles = build_profiles(request.max_dpi, request.min_dpi)
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+        emit(
+            InputInspected(
+                source=source,
+                source_bytes=snapshot.size,
+                page_count=expected_pages,
+                target_bytes=request.target_bytes,
+                profile_count=len(profiles),
+            )
+        )
+
+        attempts: list[AttemptRecord] = []
 
         def run_candidate(index: int, profile: Profile) -> Candidate:
             emit(AttemptStarted(profile_index=index, profile_count=len(profiles), profile=profile))
             candidate = _evaluate_candidate(
                 backend,
-                source,
+                snapshot.path,
                 workdir,
                 index,
                 profile,
@@ -246,27 +421,41 @@ def compress_pdf(
         )
 
         common = dict(
-            source=source,
-            target_bytes=request.target_bytes,
-            source_bytes=source_bytes,
+            source_bytes=snapshot.size,
             page_count=expected_pages,
-            comparison_dpi=request.comparison_dpi,
             smallest=_record(smallest),
             attempts=tuple(attempts),
-            policy_id=policy.policy_id,
             inspection=report,
             preflight=preflight,
+            **base,
         )
         if best is None:
             return CompressionResult(
-                status=ResultStatus.TARGET_NOT_MET, output=None, selected=None, **common
+                status=ResultStatus.TARGET_NOT_MET,
+                output=None,
+                selected=None,
+                checks={CheckId.SIZE_CEILING: CheckState.FAIL, **preflight.checks},
+                **common,
             )
 
         if best.size > request.target_bytes:
             raise CompressionError("Internal error: selected output exceeds the size ceiling.")
 
-        _publish(best.path, output, expected_pages, request.target_bytes, request.overwrite)
+        if not _source_unchanged(source, snapshot):
+            return source_changed(smallest=_record(smallest), attempts=tuple(attempts))
+        _publish(
+            best.path,
+            output,
+            expected_pages,
+            request.target_bytes,
+            request.overwrite,
+            _sha256(best.path)[0],
+        )
 
     return CompressionResult(
-        status=ResultStatus.READY, output=output, selected=_record(best), **common
+        status=ResultStatus.READY,
+        output=output,
+        selected=_record(best),
+        checks={CheckId.SIZE_CEILING: CheckState.PASS, **preflight.checks},
+        **common,
     )
