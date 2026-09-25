@@ -1,0 +1,115 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux / Python ${{ matrix.python-version }} / ${{ matrix.dependencies }} dependencies
+    # Pinned rather than ubuntu-latest: the integration tests record facts about
+    # the Ghostscript build (for example that the ladder is not monotonic), and
+    # 24.04 ships the 10.02.1 the baseline was checked against.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+        dependencies: [current]
+        include:
+          # The lowest versions requirements.txt and requirements-dev.txt allow,
+          # on the oldest supported Python.
+          - python-version: "3.10"
+            dependencies: lowest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Ghostscript
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ghostscript
+
+      - name: Require Ghostscript
+        # Without it the integration tests skip instead of failing.
+        run: |
+          if ! command -v gs >/dev/null; then
+            echo "::error::Ghostscript (gs) is not on PATH"
+            exit 1
+          fi
+          echo "Ghostscript $(gs --version) at $(command -v gs)"
+
+      - name: Install current dependencies
+        if: matrix.dependencies == 'current'
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Install lowest allowed dependencies
+        if: matrix.dependencies == 'lowest'
+        run: |
+          python .github/scripts/lowest_requirements.py requirements-dev.txt > "$RUNNER_TEMP/lowest-requirements.txt"
+          cat "$RUNNER_TEMP/lowest-requirements.txt"
+          python -m pip install -r "$RUNNER_TEMP/lowest-requirements.txt"
+
+      - run: python -m pip freeze
+
+      - name: Test suite
+        run: python -m pytest --junitxml=${{ runner.temp }}/pytest-report.xml
+
+      - name: Require that no test was skipped
+        run: python .github/scripts/check_no_skips.py ${{ runner.temp }}/pytest-report.xml
+
+  windows:
+    # Not yet a supported platform: the pilot OS is undecided (CHONK-002) and
+    # the suite has only been checked on Linux. This job reports how the suite
+    # fares on Windows without blocking the workflow.
+    name: Windows / Python 3.11 / current dependencies (non-blocking)
+    runs-on: windows-latest
+    continue-on-error: true
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install Ghostscript
+        shell: pwsh
+        run: |
+          choco install ghostscript --no-progress -y
+          $bin = Get-ChildItem "C:\Program Files\gs\gs*\bin" -Directory |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $bin) { throw "Ghostscript bin directory not found" }
+          $bin.FullName | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Require Ghostscript
+        shell: pwsh
+        run: |
+          $gs = Get-Command gswin64c.exe -ErrorAction SilentlyContinue
+          if (-not $gs) {
+            Write-Output "::error::Ghostscript (gswin64c.exe) is not on PATH"
+            exit 1
+          }
+          Write-Output "Ghostscript $(& $gs.Source --version) at $($gs.Source)"
+
+      - run: python -m pip install -r requirements-dev.txt
+
+      - run: python -m pip freeze
+
+      - name: Test suite
+        run: python -m pytest --junitxml=${{ runner.temp }}/pytest-report.xml
+
+      - name: Require that no test was skipped
+        run: python .github/scripts/check_no_skips.py ${{ runner.temp }}/pytest-report.xml
