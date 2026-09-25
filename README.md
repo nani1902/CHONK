@@ -187,6 +187,17 @@ See the [development plan](docs/product/README.md) for the detailed product
 requirements, current-to-target architecture, implementation tasks, and release
 validation criteria.
 
+## Tests
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The suite generates a synthetic PDF corpus at run time and needs Ghostscript
+only for its end-to-end tests. See [`tests/README.md`](tests/README.md) for the
+corpus, the evaluation checks, and the baseline defects the tests record.
+
 ## License
 
 CHONK's source code is under the PolyForm Noncommercial License 1.0.0. That

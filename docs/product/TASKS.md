@@ -1,6 +1,6 @@
 # Implementation backlog
 
-CHONK-003 (engine extraction) and CHONK-004 (versioned contract and policies) are implemented; all other tasks below are **not started**. The documents are specifications; no runtime feature should be considered delivered because it appears here. These task descriptions can be copied into GitHub issues without further decomposition for initial assignment. Creating this file does not create issues or assign people.
+All tasks below are **not started** unless their entry states otherwise. The documents are specifications; no runtime feature should be considered delivered because it appears here. These task descriptions can be copied into GitHub issues without further decomposition for initial assignment. Creating this file does not create issues or assign people.
 
 References: [requirements](PRODUCT_REQUIREMENTS.md), [architecture](ARCHITECTURE.md), [release gates](VALIDATION.md).
 
@@ -23,6 +23,7 @@ Owner fields name a responsibility, not a person. One developer may fill several
 
 ### CHONK-001 — Baseline tests and synthetic PDF corpus
 
+- Status: **complete**. The baseline suite, synthetic corpus, and recorded baseline defects are in [`tests/`](../../tests/README.md).
 - Priority / size / owner: P0 / M / engine + QA.
 - Dependencies: none.
 - Files: new `tests/`, fixture generators, test configuration; exercise existing `pdf_compressor.py`.
@@ -48,6 +49,7 @@ Owner fields name a responsibility, not a person. One developer may fill several
 
 ### CHONK-003 — Extract a UI-independent engine
 
+- Status: **implemented** in [`src/chonk/`](../../src/chonk/); legacy launchers remain.
 - Priority / size / owner: P0 / M / engine.
 - Dependencies: 001.
 - Files: `src/chonk/engine.py`, backend/search modules, compatibility launchers, `pyproject.toml`.
@@ -59,6 +61,7 @@ Owner fields name a responsibility, not a person. One developer may fill several
 
 ### CHONK-004 — Define versioned results, errors, and policies
 
+- Status: **implemented**: [`models.py`](../../src/chonk/models.py), [`policies.py`](../../src/chonk/policies.py), [`contract.py`](../../src/chonk/contract.py), and [`schemas/1.0`](../../schemas/1.0/README.md).
 - Priority / size / owner: P0 / M / engine + integration.
 - Dependencies: 003.
 - Files: `models.py`, `policies.py`, contract schemas/tests.

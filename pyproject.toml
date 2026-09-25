@@ -12,12 +12,12 @@ license = "PolyForm-Noncommercial-1.0.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 dependencies = [
     "pypdf>=5.0",
-    "pypdfium2>=4.30",
+    "pypdfium2>=5.0",
     "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7", "jsonschema>=4.18"]
+test = ["pytest>=8.0", "cryptography>=42.0", "jsonschema>=4.18"]
 
 [tool.setuptools.dynamic]
 version = { attr = "chonk.__version__" }
@@ -25,6 +25,3 @@ version = { attr = "chonk.__version__" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src", "."]
