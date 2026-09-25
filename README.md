@@ -133,6 +133,16 @@ work. Competitor feature pages: [PDF24 Creator](https://tools.pdf24.org/en/creat
 [Stirling PDF](https://github.com/Stirling-Tools/Stirling-PDF), and
 [Acrobat compression](https://helpx.adobe.com/acrobat/web/share-review-and-export/export-and-print/compress-pdfs.html).
 
+## Product development plan
+
+The proposed next stage is private PDF preparation for people and agents, with
+preflight inspection, preservation checks, local review, batch processing, and
+structured CLI/MCP results. These are planned features, not current capabilities.
+
+See the [development plan](docs/product/README.md) for the detailed product
+requirements, current-to-target architecture, implementation tasks, and release
+validation criteria.
+
 ## License
 
 CHONK's source code is under the PolyForm Noncommercial License 1.0.0. That
