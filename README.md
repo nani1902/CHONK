@@ -89,7 +89,14 @@ Useful options:
 ```
 
 Sizes accept `B`, `KB`, `MB`, `GB`, `KiB`, `MiB`, and `GiB`. `MB` uses decimal
-units and `MiB` uses binary units.
+units (`4.1MB` is exactly 4,100,000 bytes) and `MiB` uses binary units
+(1,048,576 bytes). All-lowercase spellings such as `mb` are read as bytes, but
+bit units such as `Mb`, `Kb`, `Gb`, `Mbit`, and `bit` are rejected, because 1 byte
+is 8 bits and a `2 Mb` limit is only 250,000 bytes. A size must be a positive
+whole number of bytes, so `0MB` and `2.5B` are rejected.
+
+Run the tests from the repository root with `python -m pytest` (install
+`pytest` first).
 
 ## How the search works
 

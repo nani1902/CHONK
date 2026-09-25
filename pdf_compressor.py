@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import decimal
 import math
 import os
 import re
@@ -63,23 +64,63 @@ SIZE_UNITS = {
 }
 
 
+BIT_PREFIXES = {
+    "": ("", "B"),
+    "k": ("kilo", "KB"),
+    "m": ("mega", "MB"),
+    "g": ("giga", "GB"),
+    "ki": ("kibi", "KiB"),
+    "mi": ("mebi", "MiB"),
+    "gi": ("gibi", "GiB"),
+}
+
+
+def _bit_unit_prefix(unit: str) -> str | None:
+    """Return the prefix of a unit that denotes bits (``Mb``, ``Kib``, ``Mbit``)."""
+    match = re.fullmatch(r"([kmg]i?)?bits?", unit, re.IGNORECASE)
+    if match:
+        return (match.group(1) or "").lower()
+    # A lowercase "b" after an uppercase letter is the bit spelling (Kb, Mb, Gib).
+    # All-lowercase spellings such as "mb" stay bytes, as portals commonly write.
+    if unit.lower() in SIZE_UNITS and unit.endswith("b") and unit != unit.lower():
+        return unit[:-1].lower()
+    return None
+
+
 def parse_size(value: str) -> int:
-    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)\s*", value)
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)\s*", value, re.ASCII)
     if not match:
         raise argparse.ArgumentTypeError(
             "use a size such as 500KB, 5MB, 5MiB, or 1200000B"
         )
 
-    amount = float(match.group(1))
-    unit = match.group(2).lower() or "b"
-    if unit not in SIZE_UNITS:
+    text, unit = match.groups()
+    bit_prefix = _bit_unit_prefix(unit)
+    if bit_prefix is not None:
+        name, byte_unit = BIT_PREFIXES[bit_prefix]
+        raise argparse.ArgumentTypeError(
+            f"'{unit}' means {name}bits, not {name}bytes (1 byte = 8 bits); "
+            f"use {byte_unit} for {name}bytes"
+        )
+    factor = SIZE_UNITS.get(unit.lower() or "b")
+    if factor is None:
         raise argparse.ArgumentTypeError(
             "supported units are B, KB, MB, GB, KiB, MiB, and GiB"
         )
-    size = int(amount * SIZE_UNITS[unit])
-    if size <= 0:
+
+    # Exact decimal arithmetic: 4.1MB is 4,100,000 bytes, not a truncated float.
+    with decimal.localcontext() as context:
+        context.prec = len(text) + len(str(factor))
+        context.traps[decimal.Inexact] = True
+        size = decimal.Decimal(text) * factor
+        if size != size.to_integral_value():
+            raise argparse.ArgumentTypeError(
+                f"{value.strip()} is {size.normalize():f} bytes; "
+                "the size must be a whole number of bytes"
+            )
+    if size == 0:
         raise argparse.ArgumentTypeError("target size must be greater than zero")
-    return size
+    return int(size)
 
 
 def human_size(size: int) -> str:
