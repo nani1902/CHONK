@@ -91,6 +91,10 @@ Useful options:
 Sizes accept `B`, `KB`, `MB`, `GB`, `KiB`, `MiB`, and `GiB`. `MB` uses decimal
 units and `MiB` uses binary units.
 
+Requests are bounded: the target is 1 byte to 10 GiB, `--max-attempts` is 2–64,
+`--timeout` is 1–86,400 seconds, DPI values are 1–2,400, and `--comparison-dpi`
+is 36–600. Values outside these ranges are rejected before any work starts.
+
 ## How the search works
 
 1. Try to preserve source image resolution and pass through supported JPEG and
@@ -157,8 +161,15 @@ result = compress_pdf(
 print(result.status.value, result.attempt_count)
 ```
 
-This Python API is internal and may change before a versioned contract is
-published. To run the tests (Ghostscript tests are skipped when `gs` is not
+This Python API is internal and may change. The machine-readable contract for
+future JSON CLI and MCP callers is defined separately as schema version `1.0`:
+typed requests and results, check states, reason codes, completion basis, and
+versioned preservation policies (`chonk.models`, `chonk.policies`,
+`chonk.contract`, and the JSON Schemas in [`schemas/1.0`](schemas/1.0/README.md)).
+The engine and CLI do not emit contract results yet; that wiring comes with
+inspection, validation, and the JSON CLI.
+
+To run the tests (Ghostscript tests are skipped when `gs` is not
 installed, desktop tests when Tkinter is unavailable):
 
 ```bash

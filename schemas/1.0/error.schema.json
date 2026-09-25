@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nani1902/CHONK/schemas/1.0/error.schema.json",
+  "title": "CHONK contract error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "error"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_REQUEST",
+            "UNSUPPORTED_SCHEMA_VERSION",
+            "UNKNOWN_POLICY",
+            "UNSUPPORTED_POLICY_VERSION",
+            "INVALID_RESULT"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

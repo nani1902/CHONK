@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_example_06",
+  "file_id": "file_example_06",
+  "status": "blocked",
+  "reason_codes": ["SIGNED_INPUT"],
+  "policy_id": "preserve-existing-text-v1",
+  "target_bytes": 2000000,
+  "checks": {"feature_support": "fail"},
+  "limitations": [],
+  "next_action": "handle_manually"
+}

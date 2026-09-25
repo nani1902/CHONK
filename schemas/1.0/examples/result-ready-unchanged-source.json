@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_example_03",
+  "file_id": "file_example_03",
+  "status": "ready",
+  "reason_codes": [],
+  "completion_basis": "unchanged_source",
+  "policy_id": "require-searchable-v1",
+  "target_bytes": 5000000,
+  "output_bytes": 412908,
+  "artifact_id": "artifact_example_03",
+  "checks": {
+    "size_ceiling": "pass",
+    "feature_support": "pass",
+    "page_structure": "pass",
+    "text_layer": "pass",
+    "extracted_text": "pass",
+    "visual_policy": "pass"
+  },
+  "search": {"attempts": 0, "max_attempts": 16},
+  "limitations": ["Checks do not certify portal acceptance or perfect readability."],
+  "next_action": "use_local_artifact"
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_example_07",
+  "file_id": "file_example_07",
+  "status": "blocked",
+  "reason_codes": ["TEXT_LAYER_MISSING"],
+  "policy_id": "require-searchable-v1",
+  "target_bytes": 2000000,
+  "checks": {"feature_support": "pass", "text_layer": "fail"},
+  "limitations": ["CHONK does not add OCR; this policy requires an existing text layer."],
+  "next_action": "handle_manually"
+}

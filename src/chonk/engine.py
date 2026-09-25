@@ -18,6 +18,13 @@ from chonk.backends import CompressionBackend
 from chonk.backends.ghostscript import GhostscriptBackend
 from chonk.inspection import pdf_page_count
 from chonk.models import (
+    MAX_ATTEMPTS,
+    MAX_COMPARISON_DPI,
+    MAX_DEADLINE_SECONDS,
+    MAX_DPI,
+    MAX_TARGET_BYTES,
+    MIN_ATTEMPTS,
+    MIN_COMPARISON_DPI,
     AttemptRecord,
     AttemptStarted,
     CandidateMeasured,
@@ -42,21 +49,33 @@ def _is_int(value: object) -> bool:
 
 def validate_request(request: CompressionRequest) -> None:
     """Raise :class:`InvalidRequestError` if the request is outside supported limits."""
-    if not _is_int(request.target_bytes) or request.target_bytes <= 0:
-        raise InvalidRequestError("The target size must be a positive whole number of bytes.")
+    if (
+        not _is_int(request.target_bytes)
+        or not 1 <= request.target_bytes <= MAX_TARGET_BYTES
+    ):
+        raise InvalidRequestError(
+            "The target size must be a whole number of bytes from 1 to "
+            f"{MAX_TARGET_BYTES:,}."
+        )
     for name in ("min_dpi", "max_dpi", "max_attempts", "timeout_seconds", "comparison_dpi"):
         if not _is_int(getattr(request, name)):
             raise InvalidRequestError(f"{name} must be an integer.")
-    if request.min_dpi < 1 or request.max_dpi < 1:
-        raise InvalidRequestError("DPI values must be positive integers.")
+    if not (1 <= request.min_dpi <= MAX_DPI and 1 <= request.max_dpi <= MAX_DPI):
+        raise InvalidRequestError(f"DPI values must be integers from 1 to {MAX_DPI}.")
     if request.min_dpi > request.max_dpi:
         raise InvalidRequestError("The minimum DPI cannot be greater than the maximum DPI.")
-    if request.max_attempts < 2:
-        raise InvalidRequestError("The maximum number of attempts must be at least 2.")
-    if request.timeout_seconds < 1:
-        raise InvalidRequestError("The timeout must be a positive number of seconds.")
-    if request.comparison_dpi < 36 or request.comparison_dpi > 600:
-        raise InvalidRequestError("The comparison DPI must be between 36 and 600.")
+    if not MIN_ATTEMPTS <= request.max_attempts <= MAX_ATTEMPTS:
+        raise InvalidRequestError(
+            f"The maximum number of attempts must be from {MIN_ATTEMPTS} to {MAX_ATTEMPTS}."
+        )
+    if not 1 <= request.timeout_seconds <= MAX_DEADLINE_SECONDS:
+        raise InvalidRequestError(
+            f"The timeout must be from 1 to {MAX_DEADLINE_SECONDS:,} seconds."
+        )
+    if not MIN_COMPARISON_DPI <= request.comparison_dpi <= MAX_COMPARISON_DPI:
+        raise InvalidRequestError(
+            f"The comparison DPI must be between {MIN_COMPARISON_DPI} and {MAX_COMPARISON_DPI}."
+        )
 
 
 def _record(candidate: Candidate) -> AttemptRecord:

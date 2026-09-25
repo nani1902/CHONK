@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_example_09",
+  "file_id": "file_example_09",
+  "status": "cancelled",
+  "reason_codes": ["DEADLINE_EXCEEDED"],
+  "policy_id": "scan-review-v1",
+  "target_bytes": 3000000,
+  "checks": {"feature_support": "pass"},
+  "search": {"attempts": 4, "max_attempts": 16, "smallest_tested_bytes": 3310220},
+  "limitations": [],
+  "next_action": "retry"
+}

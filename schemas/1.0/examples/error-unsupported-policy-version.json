@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "error": {
+    "code": "UNSUPPORTED_POLICY_VERSION",
+    "message": "This policy version is not supported. Supported policies: preserve-existing-text-v1, require-searchable-v1, scan-review-v1.",
+    "field": "policy_id"
+  }
+}

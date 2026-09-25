@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_example_05",
+  "file_id": "file_example_05",
+  "status": "target_not_met",
+  "reason_codes": ["TARGET_NOT_MET"],
+  "policy_id": "preserve-existing-text-v1",
+  "target_bytes": 500000,
+  "checks": {"feature_support": "pass", "size_ceiling": "fail"},
+  "search": {"attempts": 16, "max_attempts": 16, "smallest_tested_bytes": 731884},
+  "limitations": ["The search tested a bounded set of profiles; a smaller output may exist."],
+  "next_action": "increase_target"
+}

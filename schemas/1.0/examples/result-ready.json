@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_example_01",
+  "file_id": "file_example_01",
+  "status": "ready",
+  "reason_codes": [],
+  "completion_basis": "automated_checks",
+  "policy_id": "preserve-existing-text-v1",
+  "target_bytes": 2000000,
+  "output_bytes": 1872400,
+  "artifact_id": "artifact_example_01",
+  "checks": {
+    "size_ceiling": "pass",
+    "feature_support": "pass",
+    "page_structure": "pass",
+    "extracted_text": "pass",
+    "visual_policy": "pass"
+  },
+  "search": {"attempts": 6, "max_attempts": 16, "smallest_tested_bytes": 1402113},
+  "limitations": ["Checks do not certify portal acceptance or perfect readability."],
+  "next_action": "use_local_artifact"
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nani1902/CHONK/schemas/1.0/prepare-request.schema.json",
+  "title": "CHONK prepare request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "deadline_seconds",
+    "file_id",
+    "policy_id",
+    "schema_version",
+    "target_bytes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "file_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+    },
+    "target_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10737418240
+    },
+    "policy_id": {
+      "type": "string",
+      "enum": [
+        "preserve-existing-text-v1",
+        "require-searchable-v1",
+        "scan-review-v1"
+      ]
+    },
+    "deadline_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
+    "max_attempts": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 64,
+      "default": 16
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    }
+  }
+}

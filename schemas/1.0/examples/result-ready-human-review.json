@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_example_02",
+  "file_id": "file_example_02",
+  "status": "ready",
+  "reason_codes": [],
+  "completion_basis": "human_review",
+  "policy_id": "scan-review-v1",
+  "target_bytes": 1048576,
+  "output_bytes": 1012655,
+  "artifact_id": "artifact_example_02",
+  "checks": {
+    "size_ceiling": "pass",
+    "feature_support": "pass",
+    "page_structure": "pass",
+    "extracted_text": "not_applicable",
+    "visual_policy": "unknown"
+  },
+  "search": {"attempts": 9, "max_attempts": 16, "smallest_tested_bytes": 688120},
+  "review": {"accepted_checks": ["visual_policy"]},
+  "limitations": ["Checks do not certify portal acceptance or perfect readability."],
+  "next_action": "use_local_artifact"
+}

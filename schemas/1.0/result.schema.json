@@ -1,0 +1,487 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nani1902/CHONK/schemas/1.0/result.schema.json",
+  "title": "CHONK preparation result",
+  "description": "Content-free result for one file. Structural schema only: CHONK additionally enforces policy rules, e.g. a ready or needs_review result never has a required check in unknown or fail.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checks",
+    "file_id",
+    "job_id",
+    "limitations",
+    "next_action",
+    "policy_id",
+    "reason_codes",
+    "schema_version",
+    "status",
+    "target_bytes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+    },
+    "file_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "needs_review",
+        "target_not_met",
+        "blocked",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "ENCRYPTED_INPUT",
+          "SIGNED_INPUT",
+          "UNSUPPORTED_FEATURE",
+          "INSPECTION_INCONCLUSIVE",
+          "MALFORMED_INPUT",
+          "TEXT_LAYER_MISSING",
+          "SOURCE_CHANGED",
+          "ACCESS_DENIED",
+          "OUTPUT_CONFLICT",
+          "PRESERVATION_CONSTRAINT_FAILED",
+          "VALIDATION_INCONCLUSIVE",
+          "RESOURCE_LIMIT_EXCEEDED",
+          "TARGET_NOT_MET",
+          "QUALITY_REVIEW_REQUIRED",
+          "BACKEND_UNAVAILABLE",
+          "BACKEND_FAILED",
+          "INTERNAL_ERROR",
+          "CANCELLED_BY_USER",
+          "DEADLINE_EXCEEDED",
+          "REVIEW_REJECTED",
+          "REVIEW_EXPIRED"
+        ]
+      }
+    },
+    "completion_basis": {
+      "enum": [
+        "automated_checks",
+        "human_review",
+        "unchanged_source"
+      ]
+    },
+    "policy_id": {
+      "type": "string",
+      "enum": [
+        "preserve-existing-text-v1",
+        "require-searchable-v1",
+        "scan-review-v1"
+      ]
+    },
+    "target_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10737418240
+    },
+    "output_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "artifact_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size_ceiling": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "feature_support": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "page_structure": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "extracted_text": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "text_layer": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "visual_policy": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown",
+            "not_applicable"
+          ]
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempts",
+        "max_attempts"
+      ],
+      "properties": {
+        "attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 64
+        },
+        "smallest_tested_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted_checks"
+      ],
+      "properties": {
+        "accepted_checks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "size_ceiling",
+              "feature_support",
+              "page_structure",
+              "extracted_text",
+              "text_layer",
+              "visual_policy"
+            ]
+          }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "next_action": {
+      "enum": [
+        "use_local_artifact",
+        "open_local_review",
+        "increase_target",
+        "request_access",
+        "resolve_output_conflict",
+        "retry",
+        "check_installation",
+        "handle_manually",
+        "report_failure",
+        "none"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ready"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "completion_basis",
+          "artifact_id",
+          "output_bytes"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "completion_basis"
+              ]
+            },
+            {
+              "required": [
+                "artifact_id"
+              ]
+            },
+            {
+              "required": [
+                "review"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "completion_basis": {
+            "const": "human_review"
+          }
+        },
+        "required": [
+          "completion_basis"
+        ]
+      },
+      "then": {
+        "required": [
+          "review"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "review"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "needs_review"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "output_bytes"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "target_not_met"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "search"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ready"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason_codes": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "needs_review"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason_codes": {
+            "items": {
+              "enum": [
+                "QUALITY_REVIEW_REQUIRED",
+                "VALIDATION_INCONCLUSIVE"
+              ]
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "target_not_met"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason_codes": {
+            "items": {
+              "enum": [
+                "TARGET_NOT_MET"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "blocked"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason_codes": {
+            "items": {
+              "enum": [
+                "ACCESS_DENIED",
+                "ENCRYPTED_INPUT",
+                "INSPECTION_INCONCLUSIVE",
+                "MALFORMED_INPUT",
+                "OUTPUT_CONFLICT",
+                "PRESERVATION_CONSTRAINT_FAILED",
+                "RESOURCE_LIMIT_EXCEEDED",
+                "SIGNED_INPUT",
+                "SOURCE_CHANGED",
+                "TEXT_LAYER_MISSING",
+                "UNSUPPORTED_FEATURE",
+                "VALIDATION_INCONCLUSIVE"
+              ]
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason_codes": {
+            "items": {
+              "enum": [
+                "BACKEND_FAILED",
+                "BACKEND_UNAVAILABLE",
+                "INTERNAL_ERROR",
+                "RESOURCE_LIMIT_EXCEEDED"
+              ]
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "cancelled"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason_codes": {
+            "items": {
+              "enum": [
+                "CANCELLED_BY_USER",
+                "DEADLINE_EXCEEDED",
+                "REVIEW_EXPIRED",
+                "REVIEW_REJECTED"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

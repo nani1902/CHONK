@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "job_id": "job_example_08",
+  "file_id": "file_example_08",
+  "status": "failed",
+  "reason_codes": ["BACKEND_UNAVAILABLE"],
+  "policy_id": "preserve-existing-text-v1",
+  "target_bytes": 2000000,
+  "checks": {},
+  "limitations": [],
+  "next_action": "check_installation"
+}
