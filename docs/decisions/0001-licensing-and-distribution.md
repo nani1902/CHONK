@@ -19,7 +19,7 @@ Sources: the repository's [`LICENSE`](../../LICENSE); the PolyForm Noncommercial
 |---|---|---|
 | CHONK is offered under PolyForm Noncommercial 1.0.0. | `LICENSE` | High |
 | `LICENSE` is a pointer to the license URL, not the full text. PolyForm's *Notices* clause accepts "a copy of these terms or the URL for them", so the pointer satisfies it. | License §Notices | High |
-| `LICENSE` contains no copyright line and no `Required Notice:` line, so recipients have no required attribution and the licensor is not named anywhere in the tree. | `LICENSE`, repository search | High |
+| At `6509a56`, `LICENSE` contained no copyright line and no `Required Notice:` line, so the licensor was not named anywhere in the tree. Fixed afterwards: `LICENSE` now carries the full license text and `Required Notice: Copyright nani1902`. The notice uses the GitHub handle; the owner should replace it with their legal name or entity if that is the intended licensor. | `LICENSE`, repository search | High |
 | Every commit in the tree is authored by `nani1902`; there are no outside contributions and no contributor agreement. The owner is therefore, on this record, the only licensor and is free to grant additional licenses ("These terms do not ... prevent the licensor from granting licenses to anyone else"). | `git log`; license §No Other Rights | High for authorship-by-commit; moderate that commit authorship equals copyright ownership |
 | Parts of the tree were produced with AI assistance. Where a jurisdiction denies copyright to material without sufficient human authorship (the US Copyright Office's current position), the noncommercial restriction may be unenforceable for those parts. This does not restrict the owner; it weakens exclusivity. | US Copyright Office guidance; commit contents | Moderate |
 
@@ -50,6 +50,8 @@ Permitted purposes are "any noncommercial purpose", personal use without anticip
 | PyInstaller 6.22.3 | GPL-2.0-or-later with a **bootloader exception** ("unlimited permission to link or embed compiled bootloader and related files into combinations with other programs, and to distribute those combinations without any restriction coming from the use of those files"); run-time hooks and `fake-modules` are Apache-2.0 | A PyInstaller bundle may be distributed under CHONK's own terms; include the Apache-2.0 text for the embedded run-time hooks. |
 | CPython runtime and Tcl/Tk (embedded by PyInstaller) | PSF License; Tcl/Tk BSD-style | Include both notices in a bundle. Confidence: high (not re-fetched in this review). |
 
+The FreeType documentation credit is now in `THIRD_PARTY_NOTICES.md`, which the README's PyInstaller command already copies into the bundle.
+
 `requirements.txt` uses floor constraints only (`>=`). Notices therefore cannot be reproduced for "the" bundle today: two builds on different days can contain different library sets. Exact pins are a prerequisite for any distributed binary.
 
 ## 3. Options for the pilot license
@@ -70,7 +72,7 @@ The strongest argument against doing anything: the pilot is small, nobody will s
 2. **Pilot eligibility.** Noncommercial participants may use CHONK under the current terms. A commercial participant may run CHONK only after signing a written evaluation license with the owner (option A). Discovery interviews and observation of existing workflows need no license and may proceed now.
 3. **Ghostscript.** The pilot and v1 do not bundle Ghostscript; users install it from Artifex's official distribution and CHONK discovers it. Bundling is re-decided in CHONK-024 among: an AGPL-conformant aggregate (AGPL §5 "aggregate" clause, with corresponding-source offer and no restriction on replacing `gs`), an Artifex commercial license, or an alternate backend (CHONK-031). Install friction from this choice is measured in discovery (see [0004](0004-customer-hypothesis-and-go-no-go.md)).
 4. **Bundle prerequisites (CHONK-024).** Before distributing any binary: pin exact dependency versions per platform; generate notices from the exact wheels bundled; include CPython, Tcl/Tk, PyInstaller Apache-2.0 run-time hooks, all `BUILD_LICENSES/` files, Pillow's full `LICENSE`, and the FreeType FTL documentation credit.
-5. **Owner housekeeping (recommended, not required).** Add a line such as `Required Notice: Copyright <legal name of licensor>` to `LICENSE` so recipients must preserve attribution, and include the full license text rather than only the URL. Both are the owner's call because they name the legal licensor; neither changes license terms.
+5. **Owner housekeeping.** Done at the owner's request: `LICENSE` now includes the full PolyForm Noncommercial 1.0.0 text (verbatim from the PolyForm repository at tag `1.0.0`) and `Required Notice: Copyright nani1902 (https://github.com/nani1902/CHONK)`. Neither changes the license terms. Outstanding: replace the handle with the licensor's legal name or entity if they differ.
 
 ## 5. Evaluation-license key terms (for counsel to draft from)
 

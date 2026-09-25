@@ -26,3 +26,13 @@ embeds the Python runtime, Tcl/Tk, and Apache-2.0-licensed PyInstaller
 run-time hooks. See [decision
 0001](docs/decisions/0001-licensing-and-distribution.md#23-dependencies). This
 file does not replace those third-party licenses.
+
+## FreeType credit
+
+Pillow and pypdfium2 bundle FreeType, used under the FreeType License. The
+Pillow 12.3.0 wheels resolved on 2026-09-25 contain FreeType 2.14.3 (released
+2026-03-22); PDFium's bundled FreeType version is not separately reported.
+Update the year when the bundled FreeType version changes.
+
+Portions of this software are copyright © 2026 The FreeType Project
+(www.freetype.org). All rights reserved.

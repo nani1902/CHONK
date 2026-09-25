@@ -8,7 +8,7 @@
 
 When a person reads "Max 2 MB" on an upload portal and types `2 MB` into CHONK, which byte count should CHONK enforce, and how should it be shown?
 
-## 2. Baseline behavior (verified by running `pdf_compressor.parse_size` at `6509a56`)
+## 2. Baseline behavior (verified by running `pdf_compressor.parse_size` at `6509a56`; since fixed, see §5)
 
 | Input | Parsed bytes | Displayed by `human_size` | Assessment |
 |---|---|---|---|
@@ -43,7 +43,7 @@ Headroom given up by the decimal reading: 2.34% at K, 4.63% at M, 6.87% at G. At
 ## 5. Consequences
 
 - CHONK-001 fixtures assert the current truncation behavior as a baseline characterization; CHONK-004 changes it and documents the change.
-- A separate backlog suggestion has been filed for the parser defects in §2; they are not fixed in this decision-only change.
+- Items 3–5 are implemented in `pdf_compressor.py` (`parse_size`, `human_size`) with tests in `tests/test_sizes.py`: exact decimal conversion, rejection of fractional bytes and bit units, and display of decimal and binary units alongside the exact byte count. Item 4's maximum-value bound remains for CHONK-004. The §2 table records the behavior before that change.
 - If discovery finds that most participants' portals are binary and outputs are needlessly over-compressed, revisit item 1 by offering a per-destination preset, not by changing what `MB` means.
 
 ## 6. Sign-off

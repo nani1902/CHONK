@@ -89,7 +89,11 @@ Useful options:
 ```
 
 Sizes accept `B`, `KB`, `MB`, `GB`, `KiB`, `MiB`, and `GiB`. `MB` uses decimal
-units and `MiB` uses binary units.
+units and `MiB` uses binary units. Sizes are converted exactly (`4.1MB` is
+4,100,000 bytes); a value that is not a whole number of bytes, such as `2.5B`,
+is rejected. Bit units such as `Mb`, `Kb`, or `Mbit` are rejected because a
+megabit is one eighth of a megabyte. Reported sizes show decimal and binary
+units together with the exact byte count.
 
 ## How the search works
 
@@ -142,6 +146,13 @@ structured CLI/MCP results. These are planned features, not current capabilities
 See the [development plan](docs/product/README.md) for the detailed product
 requirements, current-to-target architecture, implementation tasks, and release
 validation criteria.
+
+## Tests
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
 
 ## License
 

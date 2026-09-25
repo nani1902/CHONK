@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Sequence
 
@@ -61,6 +62,8 @@ SIZE_UNITS = {
     "mib": 1_048_576,
     "gib": 1_073_741_824,
 }
+DECIMAL_DISPLAY_UNITS = (("GB", 1_000_000_000), ("MB", 1_000_000), ("KB", 1_000))
+BINARY_DISPLAY_UNITS = (("GiB", 1_073_741_824), ("MiB", 1_048_576), ("KiB", 1_024))
 
 
 def parse_size(value: str) -> int:
@@ -70,23 +73,53 @@ def parse_size(value: str) -> int:
             "use a size such as 500KB, 5MB, 5MiB, or 1200000B"
         )
 
-    amount = float(match.group(1))
-    unit = match.group(2).lower() or "b"
+    unit = match.group(2)
+    # "Mb", "Kb", "Kib", and "Mbit" conventionally mean bits, not bytes.
+    is_bits = unit.lower().endswith(("bit", "bits")) or (
+        unit.endswith("b") and any(char.isupper() for char in unit)
+    )
+    if is_bits:
+        raise argparse.ArgumentTypeError(
+            f"{unit!r} looks like bits; CHONK sizes are in bytes. "
+            "Use B, KB, MB, GB, KiB, MiB, or GiB (for example 2MB)"
+        )
+    unit = unit.lower() or "b"
     if unit not in SIZE_UNITS:
         raise argparse.ArgumentTypeError(
             "supported units are B, KB, MB, GB, KiB, MiB, and GiB"
         )
-    size = int(amount * SIZE_UNITS[unit])
+    # Decimal arithmetic keeps "4.1MB" at exactly 4,100,000 bytes.
+    size = Decimal(match.group(1)) * SIZE_UNITS[unit]
+    if size != size.to_integral_value():
+        raise argparse.ArgumentTypeError(
+            f"{value.strip()} is not a whole number of bytes"
+        )
     if size <= 0:
         raise argparse.ArgumentTypeError("target size must be greater than zero")
-    return size
+    return int(size)
+
+
+def _truncated_units(size: int, units: tuple[tuple[str, int], ...]) -> str | None:
+    # Truncate rather than round so a displayed size never overstates the bytes.
+    for unit, factor in units:
+        if size >= factor:
+            hundredths = size * 100 // factor
+            return f"{hundredths // 100}.{hundredths % 100:02d} {unit}"
+    return None
 
 
 def human_size(size: int) -> str:
-    for unit, factor in (("GiB", 1_073_741_824), ("MiB", 1_048_576), ("KiB", 1_024)):
-        if size >= factor:
-            return f"{size / factor:.2f} {unit} ({size:,} bytes)"
-    return f"{size:,} bytes"
+    parts = [
+        part
+        for part in (
+            _truncated_units(size, DECIMAL_DISPLAY_UNITS),
+            _truncated_units(size, BINARY_DISPLAY_UNITS),
+        )
+        if part
+    ]
+    if not parts:
+        return f"{size:,} bytes"
+    return f"{' / '.join(parts)} ({size:,} bytes)"
 
 
 def dpi_steps(max_dpi: int, min_dpi: int, count: int = 9) -> list[int]:
