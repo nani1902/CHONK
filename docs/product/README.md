@@ -31,12 +31,12 @@ This is a proposed development specification, not a statement that the features 
 | Execution | Local worker; no document-processing cloud fallback | A separate deployment model has its own privacy specification |
 | Agent integration | Local MCP over stdio plus structured CLI | A real remote integration requires another transport |
 | UI | Improve the existing Tkinter app before considering a rewrite | Usability testing shows an unmet requirement |
-| Platform sequence | macOS pilot; Windows before broad v1 release; Linux source CLI initially | User recruitment or packaging evidence favors another order |
+| Platform sequence | Pilot OS chosen by discovery evidence, Windows on a tie; the other desktop OS before broad v1; Linux source CLI initially ([decision 0003](../decisions/0003-pilot-platform.md), replaces the earlier unvalidated macOS-first default) | Discovery sessions are recorded |
 | Unsupported features | Explicitly block v1 processing of signed, encrypted, interactive-form, and other unvalidated document classes | Preservation support is implemented and tested |
 | Quality claim | Passed named checks; uncertain cases need review | Evidence supports additional narrowly worded claims |
-| Commercial model | Undecided; validate repeat usage and willingness to pay | Pilot and dependency-license review are complete |
+| Commercial model | Undecided; validate repeat usage and willingness to pay. No relicensing; commercial pilot users need a separate written evaluation license ([decision 0001](../decisions/0001-licensing-and-distribution.md), proposed) | Pilot is complete |
 
-These are planning defaults, not validated market findings. Platform order and commercial licensing are explicit decision gates in the backlog.
+These are planning defaults, not validated market findings. Platform order and commercial licensing are explicit decision gates in the backlog. Decision records and discovery status: [`docs/decisions/`](../decisions/README.md), [`docs/discovery/`](../discovery/SYNTHESIS.md) (0 of 5 sessions as of 2026-09-25).
 
 ## First assignment
 

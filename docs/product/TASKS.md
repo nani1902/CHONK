@@ -1,6 +1,6 @@
 # Implementation backlog
 
-All tasks below are **not started**. The documents are specifications; no runtime feature should be considered delivered because it appears here. These task descriptions can be copied into GitHub issues without further decomposition for initial assignment. Creating this file does not create issues or assign people.
+All tasks below are **not started** except CHONK-002, which is **in progress** (decision records and discovery kit drafted; owner sign-off and five sessions outstanding). The documents are specifications; no runtime feature should be considered delivered because it appears here. These task descriptions can be copied into GitHub issues without further decomposition for initial assignment. Creating this file does not create issues or assign people.
 
 References: [requirements](PRODUCT_REQUIREMENTS.md), [architecture](ARCHITECTURE.md), [release gates](VALIDATION.md).
 
@@ -43,6 +43,7 @@ Owner fields name a responsibility, not a person. One developer may fill several
   - Record frequency, baseline time/retries, sensitive-file constraints, and install tolerance without customer document contents.
   - Document supported pilot OS, customer hypothesis, and go/no-go criteria.
   - Record an explicit licensing/distribution decision before using CHONK in a commercial pilot; do not silently relicense.
+- Status (2026-09-25): in progress. Drafted [decision records 0001–0004](../decisions/README.md) and the [discovery kit](../discovery/README.md). Outstanding: owner sign-off on 0001–0004 and five recorded sessions ([synthesis](../discovery/SYNTHESIS.md): 0 of 5).
 
 ## M1 — Build a reliable core
 

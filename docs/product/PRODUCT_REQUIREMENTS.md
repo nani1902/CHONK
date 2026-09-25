@@ -24,7 +24,7 @@ The agent directs the work; it does not need document text or page images to req
 | Individual applicant | Prepare occasional sensitive files | Install, select files, enter limit, save | Will installation friction outweigh the privacy benefit? |
 | Agent/application developer | Delegate file preparation without custom shell scripts | Typed inputs, stable outcomes, deadlines, repeatable calls | What evidence is necessary before an agent can continue? |
 
-Initial recruiting hypothesis: visa/admissions processing teams. This is not evidence of demand or a compliance claim. Interview five potential users before committing to broader feature development. Never collect their client PDFs into the public repository or issue tracker.
+Initial recruiting hypothesis: visa/admissions processing teams. This is not evidence of demand or a compliance claim. Most such teams are commercial, so under CHONK's current noncommercial license they may be interviewed but cannot run CHONK without a separate written license from the owner ([decision 0001](../decisions/0001-licensing-and-distribution.md#22-what-polyform-noncommercial-permits-pilot-users-to-do)). The hypothesis, its strongest counterarguments, and fixed go/no-go criteria are in [decision 0004](../decisions/0004-customer-hypothesis-and-go-no-go.md). Interview five potential users before committing to broader feature development. Never collect their client PDFs into the public repository or issue tracker.
 
 ## 3. Positioning and alternatives
 
@@ -145,3 +145,5 @@ If repeat use is weak, revisit the job and target users before adding more PDF o
 Do not set pricing from this specification. Test whether users value individual convenience, repeated batch work, or integration into a business workflow. A plausible later model is a paid desktop/team offering, but it depends on demand and distribution costs.
 
 The baseline source uses a noncommercial license and invokes separately installed Ghostscript. Before recruiting commercial users or distributing bundles, explicitly resolve the intended CHONK usage license and review dependency/distribution obligations. Do not change licenses as a side effect of implementing these requirements. See the repository's [license](../../LICENSE) and [third-party notices](../../THIRD_PARTY_NOTICES.md).
+
+The license and dependency review for CHONK-002 is [decision 0001](../decisions/0001-licensing-and-distribution.md) (proposed; owner sign-off pending). Size-unit interpretation is [decision 0002](../decisions/0002-size-limit-units.md).
