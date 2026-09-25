@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8.0
+# Builds the disposable signing certificate for the signature-bearing fixture.
+cryptography>=42.0
