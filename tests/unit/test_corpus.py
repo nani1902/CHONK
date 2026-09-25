@@ -100,14 +100,19 @@ def test_every_text_page_carries_the_synthetic_marker(spec):
     if document.is_encrypted:
         document.decrypt(USER_PASSWORD if "user-password" in spec.name else "")
     for page in document.pages:
-        assert SYNTHETIC_MARKER in page.extract_text()
+        text = page.extract_text()
+        if "blank-page" in spec.features and not text.strip():
+            continue  # The declared blank page.
+        assert SYNTHETIC_MARKER in text
 
 
 def test_required_fixture_classes_are_present():
     features = {feature for spec in FIXTURES for feature in spec.features}
     for required in (
         "text-layer", "image-only", "rgb-image", "small-text", "multi-page", "encrypted",
-        "acroform", "annotations", "signature", "malformed",
+        "acroform", "annotations", "signature", "malformed", "outline", "xfa",
+        "javascript", "launch-action", "embedded-file", "tagged", "optional-content",
+        "unreferenced-object", "blank-page", "vector-graphics", "unmapped-text",
     ):
         assert required in features
     assert "already-small" in BY_NAME
@@ -133,7 +138,14 @@ def test_multipage_fixture_has_distinct_pages_and_geometry():
     sizes = {(round(float(p.mediabox.width)), round(float(p.mediabox.height))) for p in document.pages}
     assert sizes == {(612, 792), (595, 842), (792, 612)}
     assert [page.rotation for page in document.pages].count(90) == 1
-    assert outline_count(fixture_bytes("text-multipage")) == 2
+    assert outline_count(fixture_bytes("text-multipage")) == 0
+
+
+def test_outline_fixture_is_the_multipage_statement_plus_an_outline():
+    outline = reader("outline")
+    multipage = reader("text-multipage")
+    assert [p.extract_text() for p in outline.pages] == [p.extract_text() for p in multipage.pages]
+    assert outline_count(fixture_bytes("outline")) == 2
 
 
 @pytest.mark.parametrize(

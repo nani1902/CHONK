@@ -62,6 +62,11 @@ class FixtureSpec:
     # when the size ceiling is generous (ten times the input size).
     baseline_accepts: bool
     build: Callable[[], bytes]
+    # Expected preflight decision under the default policy
+    # (preserve-existing-text-v1): "supported", "blocked" (a feature the policy
+    # blocks is present), "inconclusive" (inspection cannot rule a blocked
+    # feature out), or "unreadable" (not a readable PDF).
+    preflight: str = "supported"
 
     @property
     def filename(self) -> str:
@@ -84,6 +89,8 @@ class PageSpec:
     rotate: int = 0
     images: dict[str, Ref] | None = None
     annotations: list[Ref] | None = None
+    resources: dict | None = None
+    extra: dict | None = None
 
 
 def _assemble(
@@ -104,6 +111,7 @@ def _assemble(
         resources: dict = {"Font": dict(fonts)}
         if page.images:
             resources["XObject"] = dict(page.images)
+        resources.update(page.resources or {})
         entries: dict = {
             "Type": Name("Page"),
             "Parent": pages_ref,
@@ -115,6 +123,7 @@ def _assemble(
             entries["Rotate"] = page.rotate
         if page.annotations:
             entries["Annots"] = list(page.annotations)
+        entries.update(page.extra or {})
         document.set(page_ref, entries)
     document.set(
         pages_ref, {"Type": Name("Pages"), "Kids": list(page_refs), "Count": len(pages)}
@@ -240,8 +249,7 @@ def build_text_statement() -> bytes:
     )
 
 
-def build_text_multipage() -> bytes:
-    """Twelve pages with distinct content, mixed geometry, and an outline."""
+def _multipage_pages() -> list[PageSpec]:
     sizes = [LETTER] * 12
     sizes[3] = A4
     sizes[6] = LETTER_LANDSCAPE
@@ -256,7 +264,17 @@ def build_text_multipage() -> bytes:
             # Scale the portrait layout so nothing falls outside the MediaBox.
             content = b"q 0.75 0 0 0.75 166.5 9 cm\n" + content + b"Q\n"
         pages.append(PageSpec(content, size=sizes[index], rotate=rotations[index]))
+    return pages
 
+
+def build_text_multipage() -> bytes:
+    """Twelve pages with distinct content and mixed geometry."""
+    return _assemble("text-multipage", "SYNTHETIC twelve-page statement", _multipage_pages())
+
+
+def build_outline() -> bytes:
+    """The twelve-page statement with a two-entry outline (bookmarks)."""
+    pages = _multipage_pages()
     document = Document()
     fonts = font_resources(document)
     page_refs = [document.reserve() for _ in pages]
@@ -277,8 +295,8 @@ def build_text_multipage() -> bytes:
         outlines, {"Type": Name("Outlines"), "First": first, "Last": second, "Count": 2}
     )
     return _assemble(
-        "text-multipage",
-        "SYNTHETIC twelve-page statement",
+        "outline",
+        "SYNTHETIC statement with outline",
         pages,
         document=document,
         fonts=fonts,
@@ -584,6 +602,239 @@ def build_signed() -> bytes:
     return prepared[: contents_start + 1] + hex_signature + prepared[contents_end - 1 :]
 
 
+def _note_page(title: str, *lines: str) -> bytes:
+    """A short text page: a heading, body lines, and the synthetic marker."""
+    body = [TextLine(72, 690 - 16 * index, 11, line, "F1") for index, line in enumerate(lines)]
+    return text_operators([_heading(f"{SYNTHETIC_MARKER} {title}", 720), *body, _marker_line("page 1 of 1")])
+
+
+def build_xfa_form() -> bytes:
+    """An AcroForm that also carries an XFA form description."""
+    document = Document()
+    fonts = font_resources(document)
+    page_ref = document.reserve()
+    field = document.add(
+        {
+            "Type": Name("Annot"),
+            "Subtype": Name("Widget"),
+            "FT": Name("Tx"),
+            "T": "reference_synthetic",
+            "V": "SYN-0001",
+            "Rect": [200, 640, 450, 660],
+            "F": 4,
+            "P": page_ref,
+        }
+    )
+    xdp = document.add(
+        Stream(
+            {},
+            b'<?xml version="1.0" encoding="UTF-8"?>\n'
+            b'<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/">'
+            b'<template xmlns="http://www.xfa.org/schema/xfa-template/3.3/">'
+            b'<subform name="SYNTHETIC"><field name="reference_synthetic"/></subform>'
+            b"</template></xdp:xdp>\n",
+        )
+    )
+    acroform = document.add({"Fields": [field], "XFA": xdp, "DA": "/F1 11 Tf 0 g"})
+    return _assemble(
+        "xfa-form",
+        "SYNTHETIC XFA form",
+        [PageSpec(_note_page("XFA form", "Reference:"), annotations=[field])],
+        document=document,
+        fonts=fonts,
+        catalog_extra={"AcroForm": acroform},
+        page_refs=[page_ref],
+    )
+
+
+def _javascript(document: Document, source: str) -> Ref:
+    return document.add({"S": Name("JavaScript"), "JS": source})
+
+
+def build_javascript_document() -> bytes:
+    """Document-level JavaScript: a name-tree script and an open action."""
+    document = Document()
+    fonts = font_resources(document)
+    named = _javascript(document, "/* SYNTHETIC */ var chonkFixture = 1;")
+    opener = _javascript(document, "/* SYNTHETIC */ app.alert('synthetic');")
+    names = document.add({"JavaScript": {"Names": ["synthetic-script", named]}})
+    return _assemble(
+        "javascript-document",
+        "SYNTHETIC document JavaScript",
+        [PageSpec(_note_page("scripted document", "Opening this file runs a script."))],
+        document=document,
+        fonts=fonts,
+        catalog_extra={"Names": names, "OpenAction": opener},
+    )
+
+
+def build_page_open_action() -> bytes:
+    """A page additional-action (/AA /O) that launches an application."""
+    document = Document()
+    fonts = font_resources(document)
+    launch = document.add({"S": Name("Launch"), "F": "synthetic-program.invalid"})
+    return _assemble(
+        "page-open-action",
+        "SYNTHETIC page action",
+        [PageSpec(
+            _note_page("page action", "Opening this page requests a program launch."),
+            extra={"AA": {"O": launch}},
+        )],
+        document=document,
+        fonts=fonts,
+    )
+
+
+def build_embedded_file() -> bytes:
+    """A document-level attachment in the EmbeddedFiles name tree."""
+    document = Document()
+    fonts = font_resources(document)
+    payload = b"SYNTHETIC attachment: invented data only.\n"
+    stream = document.add(
+        Stream({"Type": Name("EmbeddedFile"), "Subtype": Name("text/plain")}, payload)
+    )
+    filespec = document.add(
+        {"Type": Name("Filespec"), "F": "synthetic.txt", "UF": "synthetic.txt", "EF": {"F": stream}}
+    )
+    names = document.add({"EmbeddedFiles": {"Names": ["synthetic.txt", filespec]}})
+    return _assemble(
+        "embedded-file",
+        "SYNTHETIC attachment",
+        [PageSpec(_note_page("attachment", "A text file is attached to this document."))],
+        document=document,
+        fonts=fonts,
+        catalog_extra={"Names": names},
+    )
+
+
+def build_tagged_structure() -> bytes:
+    """A tagged PDF: one paragraph structure element over marked content."""
+    document = Document()
+    fonts = font_resources(document)
+    page_ref = document.reserve()
+    root = document.reserve()
+    paragraph = document.add(
+        {"Type": Name("StructElem"), "S": Name("P"), "P": root, "Pg": page_ref, "K": 0}
+    )
+    document.set(
+        root,
+        {"Type": Name("StructTreeRoot"), "K": paragraph,
+         "ParentTree": {"Nums": [0, [paragraph]]}, "ParentTreeNextKey": 1},
+    )
+    content = (
+        b"/P << /MCID 0 >> BDC\n"
+        + _note_page("tagged document", "This paragraph is tagged for assistive technology.")
+        + b"EMC\n"
+    )
+    return _assemble(
+        "tagged-structure",
+        "SYNTHETIC tagged",
+        [PageSpec(content, extra={"StructParents": 0})],
+        document=document,
+        fonts=fonts,
+        catalog_extra={"StructTreeRoot": root, "MarkInfo": {"Marked": True}},
+        page_refs=[page_ref],
+    )
+
+
+def build_optional_content() -> bytes:
+    """A layer (optional content group) that is hidden by default."""
+    document = Document()
+    fonts = font_resources(document)
+    layer = document.add({"Type": Name("OCG"), "Name": "SYNTHETIC hidden layer"})
+    content = _note_page("layered document", "One layer of this page is hidden by default.")
+    content += (
+        b"/OC /L1 BDC\n"
+        + text_operators([TextLine(72, 600, 11, "SYNTHETIC hidden layer text", "F1")])
+        + b"EMC\n"
+    )
+    return _assemble(
+        "optional-content",
+        "SYNTHETIC optional content",
+        [PageSpec(content, resources={"Properties": {"L1": layer}})],
+        document=document,
+        fonts=fonts,
+        catalog_extra={
+            "OCProperties": {"OCGs": [layer], "D": {"Order": [layer], "OFF": [layer]}}
+        },
+    )
+
+
+def build_orphan_javascript() -> bytes:
+    """A JavaScript action object that nothing in the document references.
+
+    No conforming reader runs it, but its presence means a different parser
+    or an earlier revision may see a script: inspection cannot call the
+    document free of active content.
+    """
+    document = Document()
+    fonts = font_resources(document)
+    _javascript(document, "/* SYNTHETIC */ var unreferenced = true;")
+    return _assemble(
+        "orphan-javascript",
+        "SYNTHETIC unreferenced script",
+        [PageSpec(_note_page("note", "Balance 56.78 on 2026-01-07."))],
+        document=document,
+        fonts=fonts,
+    )
+
+
+def build_blank_page() -> bytes:
+    """Three pages: text, an empty page, and text."""
+    return _assemble(
+        "blank-page",
+        "SYNTHETIC with blank page",
+        [
+            PageSpec(_statement_page(400, "page 1 of 3")),
+            PageSpec(b""),
+            PageSpec(_statement_page(402, "page 3 of 3")),
+        ],
+    )
+
+
+def build_vector_only() -> bytes:
+    """A vector bar chart with no text layer at all."""
+    rng = random.Random(11)
+    content = bytearray(_rule(72, 100, 540, 100, 1.0) + _rule(72, 100, 72, 700, 1.0))
+    for index in range(12):
+        height = rng.randrange(80, 580)
+        content += _box(90 + index * 38, 100, 26, height, 0.25 + 0.05 * (index % 6))
+    return _assemble("vector-only", "SYNTHETIC vector chart", [PageSpec(bytes(content))])
+
+
+def build_text_unmapped() -> bytes:
+    """Text drawn with a Type 3 font whose codes map to no Unicode text.
+
+    The page shows glyphs, but extraction yields only control characters, so
+    the page has text objects without a usable text layer.
+    """
+    document = Document()
+    glyph = b"500 0 0 0 400 600 d1 0 0 400 600 re f"
+    procs = {name: document.add(Stream({}, glyph)) for name in ("g1", "g2", "g3")}
+    font = document.add(
+        {
+            "Type": Name("Font"),
+            "Subtype": Name("Type3"),
+            "FontBBox": [0, 0, 500, 700],
+            "FontMatrix": [0.001, 0, 0, 0.001, 0, 0],
+            "CharProcs": procs,
+            "Encoding": {"Type": Name("Encoding"), "Differences": [1, Name("g1"), Name("g2"), Name("g3")]},
+            "FirstChar": 1,
+            "LastChar": 3,
+            "Widths": [500, 500, 500],
+            "Resources": {},
+        }
+    )
+    content = b"BT /T3 24 Tf 72 700 Td <010203010203> Tj ET\n"
+    return _assemble(
+        "text-unmapped",
+        "SYNTHETIC unmapped text",
+        [PageSpec(content, resources={"Font": {"T3": font}})],
+        document=document,
+        fonts={},
+    )
+
+
 def build_malformed_truncated() -> bytes:
     """The multipage fixture cut short: no xref table or trailer survives."""
     complete = build_text_multipage()
@@ -631,13 +882,24 @@ FIXTURES: tuple[FixtureSpec, ...] = (
     FixtureSpec(
         "text-multipage",
         "Ordinary text",
-        "Twelve distinct pages mixing Letter, A4, landscape, and /Rotate 90, plus an outline.",
-        ("text-layer", "multi-page", "mixed-geometry", "rotation", "outline"),
+        "Twelve distinct pages mixing Letter, A4, landscape, and /Rotate 90.",
+        ("text-layer", "multi-page", "mixed-geometry", "rotation"),
         True,
         "Compresses; Ghostscript folds /Rotate into the MediaBox; the product checks page "
         "count only.",
         True,
         build_text_multipage,
+    ),
+    FixtureSpec(
+        "outline",
+        "Feature inventory",
+        "The twelve-page statement plus a two-entry outline (bookmarks).",
+        ("text-layer", "multi-page", "mixed-geometry", "rotation", "outline"),
+        True,
+        "Compresses; the outline is not inspected or validated.",
+        True,
+        build_outline,
+        preflight="blocked",
     ),
     FixtureSpec(
         "text-tiny",
@@ -689,6 +951,7 @@ FIXTURES: tuple[FixtureSpec, ...] = (
         "Rejected before Ghostscript runs: password-protected.",
         False,
         build_encrypted_user_password,
+        preflight="blocked",
     ),
     FixtureSpec(
         "encrypted-owner-only",
@@ -699,6 +962,7 @@ FIXTURES: tuple[FixtureSpec, ...] = (
         "Rejected before Ghostscript runs, although no password is needed to open it.",
         False,
         build_encrypted_owner_only,
+        preflight="blocked",
     ),
     FixtureSpec(
         "form-acroform",
@@ -710,6 +974,7 @@ FIXTURES: tuple[FixtureSpec, ...] = (
         "page content, without a warning.",
         True,
         build_form,
+        preflight="blocked",
     ),
     FixtureSpec(
         "annotations",
@@ -720,6 +985,7 @@ FIXTURES: tuple[FixtureSpec, ...] = (
         "Not inspected; Ghostscript 10.02 keeps these annotation types (-dPreserveAnnots).",
         True,
         build_annotations,
+        preflight="blocked",
     ),
     FixtureSpec(
         "signed-pkcs7",
@@ -731,6 +997,114 @@ FIXTURES: tuple[FixtureSpec, ...] = (
         "without a warning.",
         True,
         build_signed,
+        preflight="blocked",
+    ),
+    FixtureSpec(
+        "xfa-form",
+        "Feature inventory",
+        "An AcroForm text field plus an XFA form description stream.",
+        ("text-layer", "acroform", "widgets", "xfa"),
+        True,
+        "Not inspected; Ghostscript does not carry XFA forms.",
+        True,
+        build_xfa_form,
+        preflight="blocked",
+    ),
+    FixtureSpec(
+        "javascript-document",
+        "Feature inventory",
+        "Document JavaScript in the name tree and as the open action.",
+        ("text-layer", "javascript", "open-action"),
+        True,
+        "Not inspected.",
+        True,
+        build_javascript_document,
+        preflight="blocked",
+    ),
+    FixtureSpec(
+        "page-open-action",
+        "Feature inventory",
+        "A page open action (/AA /O) that requests a program launch.",
+        ("text-layer", "launch-action", "additional-actions"),
+        True,
+        "Not inspected.",
+        True,
+        build_page_open_action,
+        preflight="blocked",
+    ),
+    FixtureSpec(
+        "embedded-file",
+        "Feature inventory",
+        "A plain-text attachment in the EmbeddedFiles name tree.",
+        ("text-layer", "embedded-file"),
+        True,
+        "Not inspected.",
+        True,
+        build_embedded_file,
+        preflight="blocked",
+    ),
+    FixtureSpec(
+        "tagged-structure",
+        "Feature inventory",
+        "A structure tree with one paragraph element over marked content; MarkInfo /Marked.",
+        ("text-layer", "tagged"),
+        True,
+        "Not inspected.",
+        True,
+        build_tagged_structure,
+        preflight="blocked",
+    ),
+    FixtureSpec(
+        "optional-content",
+        "Feature inventory",
+        "An optional content group (layer) that is hidden by default.",
+        ("text-layer", "optional-content"),
+        True,
+        "Not inspected.",
+        True,
+        build_optional_content,
+        preflight="blocked",
+    ),
+    FixtureSpec(
+        "orphan-javascript",
+        "Feature inventory",
+        "A JavaScript action object that nothing references.",
+        ("text-layer", "unreferenced-object"),
+        True,
+        "Not inspected.",
+        True,
+        build_orphan_javascript,
+        preflight="inconclusive",
+    ),
+    FixtureSpec(
+        "blank-page",
+        "Scans",
+        "Three pages: text, an empty page, and text.",
+        ("text-layer", "multi-page", "blank-page"),
+        True,
+        "Compresses.",
+        True,
+        build_blank_page,
+    ),
+    FixtureSpec(
+        "vector-only",
+        "Ordinary text",
+        "A vector bar chart with no text layer.",
+        ("vector-graphics", "no-text-layer"),
+        False,
+        "Compresses.",
+        True,
+        build_vector_only,
+    ),
+    FixtureSpec(
+        "text-unmapped",
+        "Text damage",
+        "Type 3 glyphs whose character codes map to no Unicode text.",
+        ("unmapped-text", "no-usable-text-layer"),
+        False,
+        "Compresses.",
+        True,
+        build_text_unmapped,
     ),
     FixtureSpec(
         "malformed-truncated",
@@ -741,6 +1115,7 @@ FIXTURES: tuple[FixtureSpec, ...] = (
         "Outcome depends on pypdf/Ghostscript recovery; input must stay unchanged.",
         False,
         build_malformed_truncated,
+        preflight="unreadable",
     ),
     FixtureSpec(
         "malformed-bad-xref",
@@ -761,6 +1136,7 @@ FIXTURES: tuple[FixtureSpec, ...] = (
         "Rejected before Ghostscript runs: could not read input PDF.",
         False,
         build_malformed_not_pdf,
+        preflight="unreadable",
     ),
 )
 

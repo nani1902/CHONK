@@ -17,7 +17,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import TYPE_CHECKING, Callable, Mapping
+
+if TYPE_CHECKING:
+    from chonk.inspection import InspectionReport, PreflightDecision
 
 # --- Numeric request limits, shared by engine and contract validation --------
 
@@ -67,7 +70,9 @@ class CompressionRequest:
 
     ``output`` is always explicit; default naming is a caller convention.
     ``target_bytes`` is an exact byte ceiling; parse human sizes with
-    :func:`chonk.sizes.parse_size` first.
+    :func:`chonk.sizes.parse_size` first. ``policy_id`` names the versioned
+    preservation policy whose feature restrictions preflight enforces; see
+    :mod:`chonk.policies`.
     """
 
     source: Path
@@ -79,6 +84,9 @@ class CompressionRequest:
     max_attempts: int = 16
     timeout_seconds: int = 900
     comparison_dpi: int = 150
+    policy_id: str = "preserve-existing-text-v1"
+    """Default is :data:`chonk.policies.DEFAULT_POLICY_ID`; the literal avoids an
+    import cycle and a test keeps the two equal."""
 
 
 @dataclass(frozen=True)
@@ -94,8 +102,9 @@ class AttemptRecord:
 class ResultStatus(str, Enum):
     """Outcome of one file. See ``docs/product/ARCHITECTURE.md`` section 4.
 
-    The engine currently produces only ``READY`` and ``TARGET_NOT_MET``; the
-    other states are defined by the contract for the stages that produce them.
+    The engine currently produces ``READY``, ``TARGET_NOT_MET``, and ``BLOCKED``
+    (preflight refused the input); the other states are defined by the
+    contract for the stages that produce them.
     """
 
     READY = "ready"
@@ -114,13 +123,22 @@ class CompressionResult:
     """Published output path; ``None`` unless the status is ``READY``."""
     target_bytes: int
     source_bytes: int
-    page_count: int
+    page_count: int | None
+    """``None`` only when preflight could not read the document."""
     comparison_dpi: int
     selected: AttemptRecord | None
     """The published attempt; ``None`` unless the status is ``READY``."""
-    smallest: AttemptRecord
+    smallest: AttemptRecord | None
+    """The smallest tested attempt; ``None`` when nothing was attempted."""
     attempts: tuple[AttemptRecord, ...]
     """Every tested profile, in the order it was tried."""
+    policy_id: str = "preserve-existing-text-v1"
+    reason_codes: tuple[ReasonCode, ...] = ()
+    """Why a ``BLOCKED`` result was refused; empty otherwise for now."""
+    inspection: InspectionReport | None = None
+    """The preflight report. It holds no document content."""
+    preflight: PreflightDecision | None = None
+    """The policy's verdict on ``inspection``."""
 
     @property
     def attempt_count(self) -> int:

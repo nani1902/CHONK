@@ -7,7 +7,12 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from chonk.adapters.text import describe_progress, describe_success, describe_target_not_met
+from chonk.adapters.text import (
+    describe_blocked,
+    describe_progress,
+    describe_success,
+    describe_target_not_met,
+)
 from chonk.backends.ghostscript import GhostscriptBackend
 from chonk.engine import compress_pdf
 from chonk.models import (
@@ -121,7 +126,8 @@ def run(args: argparse.Namespace) -> int:
     """Run one compression from parsed arguments.
 
     Returns 0 on success. Raises :class:`CompressionError` or :class:`OSError`
-    for failures, including a missed size target, as the legacy CLI did.
+    for failures, including a missed size target and a blocked input, as the
+    legacy CLI did.
     """
     request = request_from_args(args)
     backend = None
@@ -134,6 +140,8 @@ def run(args: argparse.Namespace) -> int:
         raise CompressionError(
             f"Output {verb}: {exc.path} (pass --force to replace it)."
         ) from exc
+    if result.status is ResultStatus.BLOCKED:
+        raise CompressionError(describe_blocked(result))
     if result.status is ResultStatus.TARGET_NOT_MET:
         raise CompressionError(describe_target_not_met(result, cli_hint=True))
     print(describe_success(result))

@@ -2,9 +2,12 @@
 
 The engine does not print, parse arguments, or import a user interface.
 Progress is reported through an optional callback of typed events, and the
-outcome is returned as a :class:`CompressionResult`. Expected failures other
-than a missed size target raise :class:`CompressionError`; filesystem
-failures may raise :class:`OSError`.
+outcome is returned as a :class:`CompressionResult`. Preflight inspection runs
+before any backend: input the request's policy does not support, cannot be
+inspected conclusively, or cannot be read is returned as ``BLOCKED`` without
+running a backend. Expected failures other than a missed size target or a
+blocked input raise :class:`CompressionError`; filesystem failures may raise
+:class:`OSError`.
 """
 
 from __future__ import annotations
@@ -16,7 +19,7 @@ from pathlib import Path
 
 from chonk.backends import CompressionBackend
 from chonk.backends.ghostscript import GhostscriptBackend
-from chonk.inspection import pdf_page_count
+from chonk.inspection import evaluate_preflight, inspect_pdf
 from chonk.models import (
     MAX_ATTEMPTS,
     MAX_COMPARISON_DPI,
@@ -31,6 +34,7 @@ from chonk.models import (
     CompressionError,
     CompressionRequest,
     CompressionResult,
+    ContractError,
     InputInspected,
     InvalidRequestError,
     OutputExistsError,
@@ -38,6 +42,7 @@ from chonk.models import (
     ProgressCallback,
     ResultStatus,
 )
+from chonk.policies import PolicyDefinition, get_policy
 from chonk.search import Candidate, build_profiles, choose_profiles
 from chonk.validation.structure import validate_pdf
 from chonk.validation.visual import compare_visual_similarity
@@ -47,8 +52,11 @@ def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def validate_request(request: CompressionRequest) -> None:
-    """Raise :class:`InvalidRequestError` if the request is outside supported limits."""
+def validate_request(request: CompressionRequest) -> PolicyDefinition:
+    """Raise :class:`InvalidRequestError` if the request is outside supported limits.
+
+    Returns the definition of the requested policy.
+    """
     if (
         not _is_int(request.target_bytes)
         or not 1 <= request.target_bytes <= MAX_TARGET_BYTES
@@ -76,6 +84,10 @@ def validate_request(request: CompressionRequest) -> None:
         raise InvalidRequestError(
             f"The comparison DPI must be between {MIN_COMPARISON_DPI} and {MAX_COMPARISON_DPI}."
         )
+    try:
+        return get_policy(request.policy_id)
+    except ContractError as exc:
+        raise InvalidRequestError(exc.message) from exc
 
 
 def _record(candidate: Candidate) -> AttemptRecord:
@@ -144,10 +156,12 @@ def compress_pdf(
     """Compress ``request.source`` to at most ``request.target_bytes``.
 
     ``backend`` defaults to an auto-discovered Ghostscript. The source file is
-    never modified. When no tested profile fits, the result status is
-    ``TARGET_NOT_MET`` and no output is written.
+    never modified. The source is inspected first; if the request's policy
+    does not allow it, the result status is ``BLOCKED``, the backend is never
+    discovered or run, and no output is written. When no tested profile fits,
+    the result status is ``TARGET_NOT_MET`` and no output is written.
     """
-    validate_request(request)
+    policy = validate_request(request)
 
     def emit(event) -> None:
         if on_progress is not None:
@@ -165,12 +179,33 @@ def compress_pdf(
     if output.exists() and not request.overwrite:
         raise OutputExistsError(output)
 
-    expected_pages = pdf_page_count(source)
+    source_bytes = source.stat().st_size
+    report = inspect_pdf(source)
+    preflight = evaluate_preflight(report, policy)
+    if not preflight.allowed:
+        return CompressionResult(
+            status=ResultStatus.BLOCKED,
+            source=source,
+            output=None,
+            target_bytes=request.target_bytes,
+            source_bytes=source_bytes,
+            page_count=report.page_count,
+            comparison_dpi=request.comparison_dpi,
+            selected=None,
+            smallest=None,
+            attempts=(),
+            policy_id=policy.policy_id,
+            reason_codes=preflight.reason_codes,
+            inspection=report,
+            preflight=preflight,
+        )
+    expected_pages = report.page_count
+    assert expected_pages is not None  # An allowed report was fully read.
+
     if backend is None:
         backend = GhostscriptBackend.discover()
     profiles = build_profiles(request.max_dpi, request.min_dpi)
     output.parent.mkdir(parents=True, exist_ok=True)
-    source_bytes = source.stat().st_size
 
     emit(
         InputInspected(
@@ -218,6 +253,9 @@ def compress_pdf(
             comparison_dpi=request.comparison_dpi,
             smallest=_record(smallest),
             attempts=tuple(attempts),
+            policy_id=policy.policy_id,
+            inspection=report,
+            preflight=preflight,
         )
         if best is None:
             return CompressionResult(

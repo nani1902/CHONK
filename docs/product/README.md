@@ -12,6 +12,7 @@ This is a proposed development specification, not a statement that the features 
 2. [Architecture and migration](ARCHITECTURE.md) — current implementation, required changes, privacy boundary, interfaces, and failure behavior.
 3. [Implementation backlog](TASKS.md) — ordered tasks, dependencies, deliverables, and acceptance criteria.
 4. [Validation and release plan](VALIDATION.md) — fixtures, quality evaluation, privacy checks, pilot, and release gates.
+5. [Supported-feature matrix](SUPPORTED_FEATURES.md) — what preflight inspection detects and what each policy blocks (implemented).
 
 ## Baseline and delivery boundaries
 

@@ -12,7 +12,6 @@ import pytest
 
 from chonk.backends import ghostscript as ghostscript_backend
 from support import FileState, copy_fixture
-from gaps import known_gap
 
 
 class BackendRecorder:
@@ -159,15 +158,36 @@ def test_existing_output_is_not_replaced_without_force(corpus_dir, tmp_path, run
     assert backend.calls == []
 
 
-@known_gap("CHONK-005", "signed input reaches Ghostscript, which invalidates the signature")
-def test_signed_input_is_blocked_before_ghostscript(corpus_dir, tmp_path, run_cli, backend):
+# Closed by CHONK-005: preflight inspection blocks these before Ghostscript.
+
+
+@pytest.mark.parametrize(
+    ("name", "message"),
+    [
+        ("signed-pkcs7", "digitally signed"),
+        ("form-acroform", "interactive form fields"),
+        ("orphan-javascript", "could not rule out scripts or other active content"),
+    ],
+)
+def test_unsupported_input_is_blocked_before_ghostscript(
+    corpus_dir, tmp_path, run_cli, backend, name, message
+):
+    source = copy_fixture(corpus_dir, name, tmp_path)
+    before = FileState.of(source)
+    result = run_cli(source, "--target-size", "1MB")
+    assert result.exit_code == 2
+    assert message in result.stderr
+    assert "No output was written" in result.stderr
+    assert backend.calls == []
+    assert FileState.of(source) == before
+    assert_no_output_written(tmp_path, source)
+
+
+def test_blocked_input_is_reported_even_without_ghostscript(corpus_dir, tmp_path, run_cli, monkeypatch):
+    """Preflight runs before the backend is discovered."""
+    monkeypatch.setattr(ghostscript_backend.shutil, "which", lambda name: None)
     source = copy_fixture(corpus_dir, "signed-pkcs7", tmp_path)
-    run_cli(source, "--target-size", "1MB")
-    assert backend.calls == []
-
-
-@known_gap("CHONK-005", "form input reaches Ghostscript, which drops the AcroForm")
-def test_form_input_is_blocked_before_ghostscript(corpus_dir, tmp_path, run_cli, backend):
-    source = copy_fixture(corpus_dir, "form-acroform", tmp_path)
-    run_cli(source, "--target-size", "1MB")
-    assert backend.calls == []
+    result = run_cli(source, "--target-size", "1MB")
+    assert result.exit_code == 2
+    assert "digitally signed" in result.stderr
+    assert "Ghostscript" not in result.stderr

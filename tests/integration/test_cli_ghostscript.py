@@ -49,7 +49,9 @@ def test_generous_ceiling(ghostscript, corpus_dir, tmp_path, run_cli, spec):
     target = 10 * len(fixture_bytes(spec.name))
     source, output, result = compress(run_cli, corpus_dir, tmp_path, spec.name, f"{target}B")
 
-    assert (result.exit_code == 0) is spec.baseline_accepts, result.stderr
+    # Since CHONK-005, preflight also refuses what the default policy blocks.
+    accepted = spec.baseline_accepts and spec.preflight == "supported"
+    assert (result.exit_code == 0) is accepted, result.stderr
     if result.exit_code == 0:
         assert output.stat().st_size <= target
         assert page_count(output) == page_count(source)
@@ -139,7 +141,7 @@ def test_forced_output_over_a_hard_link_to_the_input_keeps_the_input(
 
 
 PRESERVED = ["text-statement", "text-multipage", "text-tiny", "image-scan", "image-mixed",
-             "annotations", "already-small", "malformed-bad-xref"]
+             "already-small", "malformed-bad-xref"]
 
 
 @pytest.mark.parametrize("name", PRESERVED)
@@ -158,18 +160,21 @@ def test_aggressive_output_passes_evaluation(ghostscript, corpus_dir, tmp_path, 
     assert evaluation.passed, evaluation.findings
 
 
-@known_gap("CHONK-007", "Ghostscript drops the AcroForm and flattens field values, silently")
+# Closed by CHONK-005: forms and signatures are blocked before Ghostscript runs.
 def test_form_fields_survive_or_the_input_is_blocked(ghostscript, corpus_dir, tmp_path, run_cli):
     source, output, result = compress(run_cli, corpus_dir, tmp_path, "form-acroform", "1MB")
     if result.exit_code == 0:
         evaluation = evaluate(source.read_bytes(), output.read_bytes())
         assert "form_fields" not in evaluation.failed_checks, evaluation.findings
+    else:
+        assert "interactive form fields" in result.stderr
+        assert not output.exists()
 
 
-@known_gap("CHONK-005", "a signed input is rewritten and its signature silently invalidated")
 def test_signed_input_is_not_rewritten(ghostscript, corpus_dir, tmp_path, run_cli):
     _, output, result = compress(run_cli, corpus_dir, tmp_path, "signed-pkcs7", "1MB")
     assert result.exit_code != 0 and not output.exists()
+    assert "digitally signed" in result.stderr
 
 
 @known_gap("CHONK-007", "an input that already fits is still rewritten")

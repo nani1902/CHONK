@@ -133,6 +133,7 @@ def test_clean_inventory_passes():
         ("links", ReasonCode.UNSUPPORTED_FEATURE),
         ("outlines", ReasonCode.UNSUPPORTED_FEATURE),
         ("tagged_structure", ReasonCode.UNSUPPORTED_FEATURE),
+        ("optional_content", ReasonCode.UNSUPPORTED_FEATURE),
     ],
 )
 @pytest.mark.parametrize("policy", POLICIES.values(), ids=lambda p: p.policy_id)

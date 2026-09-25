@@ -74,6 +74,7 @@ Owner fields name a responsibility, not a person. One developer may fill several
 
 ### CHONK-005 — Preflight feature inspection
 
+- Status: **implemented** in [`inspection.py`](../../src/chonk/inspection.py), with the [supported-feature matrix](SUPPORTED_FEATURES.md). The engine blocks input before any backend runs. Page kinds are reported, not yet enforced: CHONK-007.
 - Priority / size / owner: P0 / L / PDF engine.
 - Dependencies: 001, 004.
 - Files: `inspection.py`, fixtures, feature-policy tests.

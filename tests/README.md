@@ -78,7 +78,8 @@ PYTHONPATH=tests python -m corpus /tmp/chonk-corpus
 | Fixture | What it exercises |
 |---|---|
 | `text-statement` | Text page, three standard fonts, numeric table |
-| `text-multipage` | 12 distinct pages; Letter, A4, landscape, `/Rotate 90`; outline |
+| `text-multipage` | 12 distinct pages; Letter, A4, landscape, `/Rotate 90` |
+| `outline` | `text-multipage` plus a two-entry outline |
 | `text-tiny` | 3.5–6 pt digits, hairlines, barcode-like bars |
 | `image-scan` | Image-only pages, no text layer |
 | `image-mixed` | Text layer plus an RGB photograph |
@@ -87,6 +88,13 @@ PYTHONPATH=tests python -m corpus /tmp/chonk-corpus
 | `form-acroform` | Filled text field and checkbox with appearance streams |
 | `annotations` | Link, note, and highlight annotations |
 | `signed-pkcs7` | `adbe.pkcs7.detached` signature that verifies with OpenSSL |
+| `xfa-form` | AcroForm field plus an XFA form stream |
+| `javascript-document`, `page-open-action` | Document JavaScript (name tree and open action); a page open action that launches a program |
+| `embedded-file` | Attachment in the EmbeddedFiles name tree |
+| `tagged-structure` | Structure tree over marked content; `/MarkInfo /Marked` |
+| `optional-content` | A layer hidden by default |
+| `orphan-javascript` | A script object nothing references (inspection must say "unknown") |
+| `blank-page`, `vector-only`, `text-unmapped` | A blank page between text pages; a vector chart with no text; Type 3 text with no usable Unicode |
 | `malformed-truncated`, `malformed-bad-xref`, `malformed-not-pdf` | Unrecoverable, repairable, and non-PDF input |
 
 Fixtures are byte-for-byte reproducible for a given set of library
@@ -107,15 +115,19 @@ Baseline findings recorded this way:
 
 | Owner | Finding |
 |---|---|
-| CHONK-005 | Signed and form inputs reach Ghostscript without inspection |
-| CHONK-005 / 007 | A signed input is rewritten and its signature silently invalidated. Form fields are dropped and their values flattened into page content |
 | CHONK-007 | An input that already fits is still rewritten, and the rewrite is larger (standard fonts get embedded). With a ceiling equal to its own size, the tool reports "No tested profile reached the size ceiling" |
 | CHONK-008 | `validate_pdf` misses reordered, rotated, resized, and blanked pages, changed digits, a removed text layer, and removed form values |
 | CHONK-009 | Mean page similarity dilutes one damaged page by the page count. Renders never initialize forms, so field values are invisible to the comparison |
 | CHONK-010 | Search reports failure when both endpoints miss although an interior profile fits. It reports the last endpoint rather than the smallest tested size. On a non-monotonic ladder it misses the best fitting profile even with a full budget |
 
-Closed since the baseline: CHONK-004 (with CHONK-003) made `parse_size` use
-exact decimal arithmetic, so `4.1MB` is 4,100,000 bytes.
+Closed since the baseline:
+
+- CHONK-004 (with CHONK-003) made `parse_size` use exact decimal arithmetic,
+  so `4.1MB` is 4,100,000 bytes.
+- CHONK-005 blocks signed, form, and other unsupported inputs before
+  Ghostscript runs. Signatures are no longer silently invalidated, and form
+  values are no longer flattened. Each fixture records its expected preflight
+  decision under the default policy (`preflight` in `corpus/catalog.py`).
 
 Other baseline facts the tests record without treating them as defects of
 this task:

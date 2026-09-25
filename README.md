@@ -74,7 +74,8 @@ python pdf_compressor.py input.pdf --target-size 4.5MiB --output smaller.pdf
 
 CHONK refuses to overwrite an existing output unless `--force` is supplied.
 It never overwrites the input. If no tested profile fits the ceiling, it
-reports the smallest candidate and leaves the output untouched.
+reports the smallest candidate and leaves the output untouched. If preflight
+inspection refuses the input (see below), it explains why and writes nothing.
 
 Useful options:
 
@@ -95,6 +96,36 @@ Requests are bounded: the target is 1 byte to 10 GiB, `--max-attempts` is 2–64
 `--timeout` is 1–86,400 seconds, DPI values are 1–2,400, and `--comparison-dpi`
 is 36–600. Values outside these ranges are rejected before any work starts.
 
+## PDFs CHONK will not compress
+
+Before running Ghostscript, CHONK inspects the source PDF. Ghostscript rewrites
+the whole file, and CHONK cannot yet check that the rewrite preserves these
+features. So it refuses PDFs that contain any of them:
+
+- encryption, including PDFs that open without a password
+- digital signatures (a rewrite always invalidates them)
+- interactive or XFA form fields
+- JavaScript, launch actions, and other active content
+- attached files
+- comments and other annotations, links, and bookmarks
+- accessibility tags
+- layers (optional content)
+
+CHONK also refuses a PDF when it cannot rule these features out. That happens
+when the file is damaged in a way that hides part of its structure, when it
+holds a script object that nothing references, or when the parser and the
+renderer disagree about the page count. Refusals exit with status 2, name
+the features involved, and leave the original untouched.
+
+This is stricter than earlier versions of CHONK, which compressed PDFs with
+links, bookmarks, annotations, forms, or signatures and silently lost or
+invalidated some of them. Common PDFs are affected, for example
+word-processor exports with links or tags. The complete matrix, the
+detection method, and the known limitations are in
+[`docs/product/SUPPORTED_FEATURES.md`](docs/product/SUPPORTED_FEATURES.md).
+Support for individual features will return as validators that prove their
+preservation are added.
+
 ## How the search works
 
 1. Try to preserve source image resolution and pass through supported JPEG and
@@ -110,10 +141,8 @@ The finite search is a practical quality optimization, not a guarantee of a
 global optimum or a perfect measure of human perception. Long PDFs can take
 time because each candidate is rendered and compared page by page.
 
-Ghostscript rewrites the PDF. Some information that does not draw on a page,
-including certain annotations and document features, may not survive. Digital
-signatures and interactive forms are not supported; keep the original if those
-features matter. See the
+Ghostscript rewrites the PDF. Metadata, page labels, and other information
+that CHONK does not inspect may change. See the
 [Ghostscript PDF output documentation](https://ghostscript.readthedocs.io/en/latest/VectorDevices.html#the-family-of-pdf-and-postscript-output-devices).
 
 ## How CHONK can stand out

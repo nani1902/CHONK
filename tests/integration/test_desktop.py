@@ -13,6 +13,7 @@ pytest.importorskip("tkinter")
 import app  # noqa: E402
 from chonk import CompressionError, ResultStatus  # noqa: E402
 from conftest import PaddingBackend  # noqa: E402
+from support import copy_fixture  # noqa: E402
 
 
 class Var:
@@ -105,3 +106,18 @@ def test_worker_target_not_met_is_distinct_from_errors(monkeypatch, image_pdf, u
     assert messages == [("log", "Error: Ghostscript was not found.\n"), ("done", None)]
     failing._finish(None)
     assert failing.status.value == "Compression failed; see the details below."
+
+
+def test_worker_blocked_input_is_distinct_from_errors(monkeypatch, corpus_dir, tmp_path):
+    instance = headless_app()
+    source = copy_fixture(corpus_dir, "signed-pkcs7", tmp_path)
+    messages = run_worker(
+        monkeypatch, instance, source, tmp_path / "out.pdf", 10_000_000, lambda profile: 0
+    )
+    assert [kind for kind, _ in messages] == ["done"]
+    result = messages[-1][1]
+    assert result.status is ResultStatus.BLOCKED and result.attempts == ()
+    instance._finish(result)
+    assert instance.status.value == "CHONK cannot compress this PDF safely; see the details below."
+    assert "digitally signed" in instance.logged[-1]
+    assert not (tmp_path / "out.pdf").exists()

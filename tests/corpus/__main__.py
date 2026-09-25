@@ -43,6 +43,7 @@ def manifest(directory: Path) -> dict:
                 "has_text_layer": spec.has_text_layer,
                 "baseline": spec.baseline,
                 "baseline_accepts": spec.baseline_accepts,
+                "preflight": spec.preflight,
                 "generator": f"tests/corpus/catalog.py:{spec.build.__name__}",
                 "bytes": len(data),
                 "sha256": hashlib.sha256(data).hexdigest(),

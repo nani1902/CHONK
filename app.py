@@ -26,6 +26,7 @@ from chonk import (  # noqa: E402
     parse_size,
 )
 from chonk.adapters.text import (  # noqa: E402
+    describe_blocked,
     describe_progress,
     describe_success,
     describe_target_not_met,
@@ -344,6 +345,9 @@ class ChonkApp:
         self.compress_button.configure(state="normal")
         if result is None:
             self.status.set("Compression failed; see the details below.")
+        elif result.status is ResultStatus.BLOCKED:
+            self._append_log(describe_blocked(result) + "\n")
+            self.status.set("CHONK cannot compress this PDF safely; see the details below.")
         elif result.status is ResultStatus.TARGET_NOT_MET:
             self._append_log(describe_target_not_met(result, cli_hint=False) + "\n")
             self.status.set("Could not meet the requested size limit.")

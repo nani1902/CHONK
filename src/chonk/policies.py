@@ -5,10 +5,11 @@ A policy ID names an immutable definition, ``<name>-v<version>``. Changing what
 a policy requires means adding a new version, never editing an existing one
 after release. Agents select a policy explicitly and cannot weaken it.
 
-The v1 definitions are provisional until the first release: preflight
-inspection (CHONK-005) and preservation validators (CHONK-008) may still
-refine them. Until a feature has a validator, its presence blocks
-transformation.
+The v1 definitions are provisional until the first release: preservation
+validators (CHONK-008) may still refine them, and preflight inspection
+(CHONK-005) added ``optional_content``. Until a feature has a validator, its
+presence blocks transformation. ``docs/product/SUPPORTED_FEATURES.md``
+documents the matrix, and a test keeps it in step with these definitions.
 """
 
 from __future__ import annotations
@@ -34,6 +35,9 @@ class Feature(str, Enum):
     LINKS = "links"
     OUTLINES = "outlines"
     TAGGED_STRUCTURE = "tagged_structure"
+    OPTIONAL_CONTENT = "optional_content"
+    """Layers (optional content groups). Hidden layers can hold content that
+    the default view, and therefore visual comparison, does not show."""
 
 
 class FeaturePresence(str, Enum):
